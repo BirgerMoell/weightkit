@@ -1,5 +1,7 @@
 # weightkit
 
+**[→ Live site & interactive playground](https://birgermoell.github.io/weightkit/)**
+
 **One toolkit for every way of changing a network's weights directly** — no gradient descent, no training loop.
 
 [mergekit](https://github.com/arcee-ai/mergekit) is excellent at one slice of this: *combining several models*. But "change the weights directly" is a much bigger family, and the rest of it is scattered across one-off research repos with incompatible conventions: abliteration scripts, ROME/MEMIT, Wanda/SparseGPT, QuaRot/SmoothQuant, LoRA tooling, layer surgery... `weightkit` puts them all behind a single abstraction so they **compose in one pipeline** and share one tensor store, one architecture description, one calibration format and one test harness.

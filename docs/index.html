@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>weightkit — edit neural-network weights directly</title>
+<meta name="description" content="One composable toolkit for every way of changing a network's weights directly: merging, pruning, ROME/MEMIT, abliteration, rotations, SVD surgery, LoRA.">
+<meta property="og:title" content="weightkit — edit neural-network weights directly">
+<meta property="og:description" content="25 composable weight-editing ops. No gradient descent. Try them live on a real matrix.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0a0c11">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0c11'/><g fill='%2358e6d9'><rect x='6' y='6' width='6' height='6'/><rect x='20' y='6' width='6' height='6' fill='%23ff6b9a'/><rect x='13' y='13' width='6' height='6' fill='%238b7bff'/><rect x='6' y='20' width='6' height='6' fill='%238b7bff'/><rect x='20' y='20' width='6' height='6'/></g></svg>">
+<style>
+:root{
+  --bg:#0a0c11; --bg2:#0f1218; --panel:#131720; --panel2:#181d28; --line:#232a38; --line2:#2d3647;
+  --text:#e8ecf4; --mut:#98a2b8; --dim:#677088;
+  --cyan:#58e6d9; --vio:#8b7bff; --pink:#ff6b9a; --amber:#ffc46b; --green:#6be58f;
+  --grad:linear-gradient(100deg,var(--cyan),var(--vio) 55%,var(--pink));
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+:root[data-theme=light]{
+  --bg:#f6f7fb; --bg2:#eceef5; --panel:#ffffff; --panel2:#f3f5fa; --line:#dde1ec; --line2:#c9cfde;
+  --text:#141824; --mut:#4d5670; --dim:#7a839c; --cyan:#0a9c93; --vio:#5b49e8; --pink:#e03a74; --amber:#b9780a; --green:#14954a;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit} code,pre,.mono{font-family:var(--mono)}
+.wrap{max-width:1160px;margin:0 auto;padding:0 20px}
+section{padding:84px 0;position:relative}
+h1,h2,h3{line-height:1.1;margin:0;letter-spacing:-.02em}
+h2{font-size:clamp(28px,4vw,44px);font-weight:750}
+.kicker{font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin-bottom:14px}
+.lead{color:var(--mut);font-size:18px;max-width:62ch;margin:14px 0 0}
+.grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* nav */
+nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:color-mix(in srgb,var(--bg) 78%,transparent);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:22px;height:58px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:750;text-decoration:none;letter-spacing:-.01em}
+.logo i{display:grid;grid-template-columns:repeat(3,6px);gap:2px}
+.logo i b{width:6px;height:6px;background:var(--cyan);border-radius:1px}
+.logo i b:nth-child(2n){background:var(--vio)} .logo i b:nth-child(5){background:var(--pink)}
+nav .links{margin-left:auto;display:flex;gap:6px;align-items:center}
+nav a.l{color:var(--mut);text-decoration:none;font-size:14px;padding:6px 10px;border-radius:8px}
+nav a.l:hover{color:var(--text);background:var(--panel)}
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 14px var(--sans);border:1px solid var(--line2);background:var(--panel);color:var(--text);padding:10px 16px;border-radius:11px;text-decoration:none;cursor:pointer;transition:.15s}
+.btn:hover{border-color:var(--cyan);transform:translateY(-1px)}
+.btn.pri{background:var(--grad);color:#07090d;border:0}
+.btn.pri:hover{filter:brightness(1.1)}
+.icon-btn{padding:7px 9px;font-size:16px;line-height:1}
+@media(max-width:760px){nav a.l{display:none}}
+
+/* hero */
+.hero{padding:70px 0 40px;overflow:hidden}
+#bg{position:absolute;inset:0;width:100%;height:100%;opacity:.9;pointer-events:none;mask-image:radial-gradient(ellipse 80% 70% at 50% 35%,#000 20%,transparent 75%);-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 35%,#000 20%,transparent 75%)}
+.hero .wrap{position:relative;text-align:center}
+.pill{display:inline-flex;gap:8px;align-items:center;font:500 13px var(--mono);color:var(--mut);border:1px solid var(--line2);background:color-mix(in srgb,var(--panel) 80%,transparent);padding:6px 14px;border-radius:99px}
+.pill b{color:var(--green)}
+.hero h1{font-size:clamp(40px,7.4vw,92px);font-weight:800;margin:26px auto 0;max-width:15ch;letter-spacing:-.04em}
+.hero p.sub{font-size:clamp(17px,2.2vw,22px);color:var(--mut);max-width:60ch;margin:22px auto 0}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+.install{margin:26px auto 0;display:flex;align-items:center;gap:12px;justify-content:space-between;max-width:520px;font:14px var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left}
+.install span{color:var(--dim)} .install code{color:var(--text);overflow-x:auto;white-space:nowrap}
+.copy{font:600 12px var(--mono);color:var(--cyan);background:none;border:1px solid var(--line2);border-radius:8px;padding:5px 10px;cursor:pointer}
+.copy:hover{border-color:var(--cyan)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin:56px auto 0;max-width:860px}
+.stats div{background:var(--panel);padding:18px 8px}
+.stats b{display:block;font:800 34px var(--sans);letter-spacing:-.03em}
+.stats small{color:var(--mut);font-size:13px}
+@media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* pipeline strip */
+.strip{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:44px}
+.chip{font:600 13px var(--mono);padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel);color:var(--mut);transition:.35s}
+.chip.on{color:#07090d;background:var(--grad);border-color:transparent;transform:translateY(-3px);box-shadow:0 10px 30px -10px var(--vio)}
+.arrow{color:var(--dim);align-self:center;font-family:var(--mono)}
+
+/* playground */
+.pg{background:linear-gradient(180deg,var(--bg2),var(--bg));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ops{display:flex;flex-wrap:wrap;gap:8px;margin:30px 0 20px}
+.op{font:600 13px var(--mono);padding:9px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel);color:var(--mut);cursor:pointer;transition:.15s}
+.op:hover{color:var(--text);border-color:var(--dim)}
+.op[aria-pressed=true]{color:#07090d;background:var(--grad);border-color:transparent}
+.stage{display:grid;grid-template-columns:1.35fr 1fr;gap:20px}
+@media(max-width:940px){.stage{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
+.mats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:560px){.mats{grid-template-columns:1fr 1fr}.mats figure:last-child{grid-column:1/-1}}
+figure{margin:0}
+figure canvas{width:100%;aspect-ratio:1;border-radius:10px;background:#0b0d12;image-rendering:pixelated;display:block;border:1px solid var(--line)}
+figcaption{font:600 12px var(--mono);color:var(--mut);margin-top:8px;letter-spacing:.04em;text-transform:uppercase;display:flex;justify-content:space-between}
+.ctl{margin-top:20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ctl label{font:600 13px var(--mono);color:var(--mut)}
+.ctl output{font:700 14px var(--mono);color:var(--cyan);min-width:48px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--vio);height:28px}
+.reseed{margin-left:auto}
+.read{display:flex;flex-direction:column;gap:14px}
+.read h3{font-size:22px} .read p{color:var(--mut);margin:0}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.m{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.m small{display:block;color:var(--dim);font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.m b{font:700 19px var(--mono)} .ok{color:var(--green)} .warn{color:var(--amber)}
+.verdict{border-radius:12px;padding:12px 14px;font:600 14px var(--sans);border:1px solid}
+.verdict.ok{border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 10%,transparent)}
+.verdict.warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 9%,transparent)}
+pre.code{margin:0;background:#090b10;color:#d6deef;border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.65}
+:root[data-theme=light] pre.code{background:#10131b}
+.k{color:#8bc4ff}.s{color:#9be3a3}.n{color:#ffc46b}.c{color:#6a748c}.p{color:#ff8fb3}
+.legend{display:flex;gap:14px;align-items:center;font:12px var(--mono);color:var(--dim);margin-top:14px}
+.legend i{display:inline-block;width:70px;height:8px;border-radius:5px;background:linear-gradient(90deg,#4aa3ff,#12151d,#ff7a59)}
+.note{color:var(--dim);font-size:13px;margin-top:14px}
+
+/* why */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+@media(max-width:900px){.grid3{grid-template-columns:1fr}}
+.why{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;position:relative;overflow:hidden;transition:.2s}
+.why:hover{border-color:var(--line2);transform:translateY(-3px)}
+.why .num{font:700 12px var(--mono);color:var(--cyan)}
+.why h3{font-size:21px;margin:10px 0 8px} .why p{color:var(--mut);margin:0;font-size:15px}
+.why::after{content:"";position:absolute;right:-40px;top:-40px;width:120px;height:120px;border-radius:50%;background:var(--grad);opacity:.12;filter:blur(20px)}
+
+/* catalog */
+.fam{display:flex;flex-wrap:wrap;gap:8px;margin:30px 0 22px}
+.fam button{font:600 13px var(--mono);padding:8px 13px;border-radius:99px;border:1px solid var(--line2);background:transparent;color:var(--mut);cursor:pointer}
+.fam button[aria-pressed=true]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.cat{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;transition:.15s}
+.item:hover{border-color:var(--vio)}
+.item h4{margin:0 0 4px;font:700 15px var(--mono);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:var(--panel2);color:var(--dim)}
+.tag.exact{color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent)}
+.item p{margin:0;color:var(--mut);font-size:14px}
+
+/* compare */
+table{width:100%;border-collapse:collapse;margin-top:34px;font-size:15px;background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--line)} tr:last-child td{border-bottom:0}
+th{font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);background:var(--panel2)}
+td.y{color:var(--green);font-weight:700} td.n{color:var(--dim)} td.p{color:var(--amber)}
+.tw{overflow-x:auto}
+@media(max-width:620px){td,th{padding:10px}}
+
+/* verified */
+.checks{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:34px}
+@media(max-width:800px){.checks{grid-template-columns:1fr}}
+.check{display:flex;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.check i{font-style:normal;color:var(--green);font-weight:800;font-size:18px;line-height:1.3}
+.check p{margin:0;color:var(--mut);font-size:15px} .check b{color:var(--text)}
+.honest{margin-top:34px;border:1px dashed var(--line2);border-radius:16px;padding:22px 24px;background:color-mix(in srgb,var(--amber) 5%,transparent)}
+.honest h3{font-size:18px;margin-bottom:10px;color:var(--amber)}
+.honest ul{margin:0;padding-left:20px;color:var(--mut);font-size:15px} .honest li{margin:5px 0}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:34px}
+@media(max-width:900px){.two{grid-template-columns:1fr}}
+.two .tabs{display:flex;gap:6px;margin-bottom:10px}
+footer{border-top:1px solid var(--line);padding:40px 0;color:var(--dim);font-size:14px}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s,transform .7s}
+.reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="logo" href="#top"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>weightkit</a>
+  <div class="links">
+    <a class="l" href="#playground">Playground</a><a class="l" href="#ops">Ops</a><a class="l" href="#pipeline">Pipelines</a><a class="l" href="#verified">Verified</a>
+    <button class="btn icon-btn" id="theme" aria-label="Toggle light/dark theme">◐</button>
+    <a class="btn" href="https://github.com/BirgerMoell/weightkit">★ GitHub</a>
+  </div>
+</div></nav>
+
+<header class="hero" id="top">
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <span class="pill"><b>●</b> v0.1.0 &nbsp;·&nbsp; Apache-2.0 &nbsp;·&nbsp; 74 tests passing</span>
+    <h1>Edit a neural network's <span class="grad">weights directly.</span></h1>
+    <p class="sub">Merging, pruning, ROME/MEMIT, abliteration, rotations, SVD surgery, LoRA — every way of changing weights without training, behind <b>one composable op API</b>.</p>
+    <div class="cta">
+      <a class="btn pri" href="#playground">Try it live ↓</a>
+      <a class="btn" href="https://github.com/BirgerMoell/weightkit">View on GitHub</a>
+    </div>
+    <div class="install"><span>$</span><code id="inst">pip install git+https://github.com/BirgerMoell/weightkit</code><button class="copy" data-copy-from="inst">copy</button></div>
+    <div class="strip" id="strip" aria-label="Example pipeline"></div>
+    <div class="stats">
+      <div><b data-n="25">0</b><small>composable ops</small></div>
+      <div><b data-n="9">0</b><small>merge methods</small></div>
+      <div><b data-n="6">0</b><small>exact transforms</small></div>
+      <div><b data-n="0" data-text="0 grads">0</b><small>gradient steps</small></div>
+    </div>
+  </div>
+</header>
+
+<section class="pg" id="playground"><div class="wrap">
+  <div class="reveal">
+    <div class="kicker">Live playground</div>
+    <h2>Perform surgery on a real weight matrix.</h2>
+    <p class="lead">This is a 16×16 weight matrix being edited in your browser with the same maths the library runs. Watch what changes — and whether the network's <em>function</em> survives.</p>
+  </div>
+  <div class="ops" id="opbar" role="group" aria-label="Operation"></div>
+  <div class="stage reveal">
+    <div class="card">
+      <div class="mats">
+        <figure><canvas id="c0" aria-label="Original weights"></canvas><figcaption><span>Before</span><span id="l0"></span></figcaption></figure>
+        <figure><canvas id="c1" aria-label="Edited weights"></canvas><figcaption><span>After</span><span id="l1"></span></figcaption></figure>
+        <figure><canvas id="c2" aria-label="Difference"></canvas><figcaption><span>Δ change</span><span id="l2"></span></figcaption></figure>
+      </div>
+      <div class="legend"><span>negative</span><i></i><span>positive</span><span style="margin-left:auto">ten random inputs used for function checks</span></div>
+      <div class="ctl">
+        <label id="plabel" for="param">param</label>
+        <input type="range" id="param"><output id="pval"></output>
+        <button class="btn reseed" id="reseed">↻ new matrix</button>
+      </div>
+    </div>
+    <div class="card read">
+      <h3 id="otitle"></h3>
+      <p id="odesc"></p>
+      <div class="metrics" id="metrics"></div>
+      <div class="verdict" id="verdict"></div>
+      <pre class="code" id="ocode"></pre>
+    </div>
+  </div>
+  <p class="note">Matrix = low-rank structure + noise, with two outlier input channels (columns 3 and 11) — the pathology that rotations and smoothing exist to fix. Pure JS demo; the real implementations are in the Python package.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="reveal"><div class="kicker">Why it exists</div><h2>mergekit combines models.<br><span class="grad">Everything else was scattered.</span></h2>
+  <p class="lead">Abliteration scripts, ROME repos, Wanda, SparseGPT, QuaRot, LoRA tooling — each with its own conventions. weightkit puts them behind a single abstraction so they compose.</p></div>
+  <div class="grid3">
+    <div class="why reveal"><span class="num">01</span><h3>One Op abstraction</h3><p>Every method is a registered class with typed parameters. A new method is ~20 lines. Single-model and multi-model ops are the same thing — so <i>merge → abliterate → prune</i> is a pipeline, not three tools.</p></div>
+    <div class="why reveal"><span class="num">02</span><h3>Exact transforms, proven exact</h3><p>Norm folding, Hadamard rotation, permutation, rescaling, SmoothQuant scaling, Re-Basin alignment — each is tested to leave logits unchanged, including on a real Hugging Face Llama.</p></div>
+    <div class="why reveal"><span class="num">03</span><h3>Lazy, spillable, shared</h3><p>Tensors load on demand; edits spill to temp safetensors past a memory budget. One calibration file feeds Wanda, SparseGPT, MEMIT, SmoothQuant and abliteration.</p></div>
+  </div>
+</div></section>
+
+<section id="ops" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="reveal"><div class="kicker">The catalog</div><h2>25 ops. One interface.</h2>
+  <p class="lead">Filter by family. <span class="tag exact">exact</span> marks transforms that preserve the network's function.</p></div>
+  <div class="fam" id="fam" role="group" aria-label="Filter by family"></div>
+  <div class="cat" id="cat"></div>
+</div></section>
+
+<section id="pipeline"><div class="wrap">
+  <div class="reveal"><div class="kicker">Pipelines</div><h2>Compose them in YAML — or Python.</h2>
+  <p class="lead">Each step runs on the shared store; calibration is collected once and reused.</p></div>
+  <div class="two reveal">
+    <div>
+      <div class="kicker" style="margin-bottom:8px">pipeline.yaml</div>
+<pre class="code"><span class="k">base</span>: ./Llama-3-8B
+<span class="k">calibration</span>: ./calib.pt
+<span class="k">output</span>: ./out
+<span class="k">steps</span>:
+  - <span class="k">op</span>: <span class="s">merge</span>            <span class="c"># TIES + DARE</span>
+    <span class="k">method</span>: <span class="s">dare_ties</span>
+    <span class="k">density</span>: <span class="n">0.5</span>
+    <span class="k">sources</span>: [{model: math, weight: <span class="n">0.6</span>}, {model: code, weight: <span class="n">0.4</span>}]
+  - <span class="k">op</span>: <span class="s">abliterate</span>
+    <span class="k">pos</span>: harmful
+    <span class="k">neg</span>: harmless
+    <span class="k">layer</span>: <span class="n">14</span>
+  - <span class="k">op</span>: <span class="s">rotate</span>           <span class="c"># exact outlier smoothing</span>
+  - <span class="k">op</span>: <span class="s">prune</span>
+    <span class="k">method</span>: <span class="s">sparsegpt</span>
+    <span class="k">nm</span>: [<span class="n">2</span>, <span class="n">4</span>]</pre>
+    </div>
+    <div>
+      <div class="kicker" style="margin-bottom:8px">Python</div>
+<pre class="code"><span class="p">import</span> torch
+<span class="p">from</span> weightkit <span class="p">import</span> TensorStore, apply_op, Calibration
+
+store = TensorStore.from_path(<span class="s">"./Llama-3-8B"</span>)  <span class="c"># lazy</span>
+calib = Calibration.load(<span class="s">"calib.pt"</span>)
+
+apply_op(store, <span class="s">"prune"</span>, calib=calib,
+         method=<span class="s">"wanda"</span>, sparsity=<span class="n">0.5</span>)
+apply_op(store, <span class="s">"rotate"</span>, kind=<span class="s">"hadamard"</span>)
+
+store.save(<span class="s">"./out"</span>, dtype=torch.bfloat16)</pre>
+<div class="kicker" style="margin:18px 0 8px">CLI</div>
+<pre class="code">weightkit ops -v
+weightkit run pipeline.yaml
+weightkit diff ./model ./out
+weightkit extract-lora ./base ./ft ./adapter --rank 32
+weightkit calibrate ./model calib.pt --text corpus.txt --xtx</pre>
+    </div>
+  </div>
+</div></section>
+
+<section style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="reveal"><div class="kicker">Versus mergekit</div><h2>A superset in scope, not a replacement in polish.</h2>
+  <p class="lead">mergekit is excellent at what it does — large-scale model merging. weightkit covers the broader family of direct weight edits.</p></div>
+  <div class="tw reveal"><table>
+    <thead><tr><th>Capability</th><th>mergekit</th><th>weightkit</th></tr></thead>
+    <tbody>
+      <tr><td>Merging: linear, SLERP, task-arith, TIES, DARE, breadcrumbs, model-stock</td><td class="y">✓</td><td class="y">✓</td></tr>
+      <tr><td>Task-vector negation / LoRA merge / <b>LoRA extraction</b></td><td class="p">partial</td><td class="y">✓</td></tr>
+      <tr><td>Pruning: magnitude, Wanda, SparseGPT, N:M</td><td class="n">—</td><td class="y">✓</td></tr>
+      <tr><td>Structured pruning: layers, MLP neurons, KV-head groups</td><td class="n">—</td><td class="y">✓</td></tr>
+      <tr><td>Knowledge editing: ROME / MEMIT closed form</td><td class="n">—</td><td class="y">✓</td></tr>
+      <tr><td>Abliteration &amp; weight-baked steering</td><td class="n">—</td><td class="y">✓</td></tr>
+      <tr><td>Exact transforms: rotation, folding, permutation, SmoothQuant, Re-Basin</td><td class="n">—</td><td class="y">✓</td></tr>
+      <tr><td>SVD surgery, KV-pooling, vocab resize, RTN quantization</td><td class="n">—</td><td class="y">✓</td></tr>
+      <tr><td>MoE merging, tokenizer surgery, evolutionary search, multi-GPU</td><td class="y">✓</td><td class="n">not yet</td></tr>
+      <tr><td>Battle-tested on multi-billion-parameter checkpoints</td><td class="y">✓</td><td class="p">not yet</td></tr>
+    </tbody></table></div>
+</div></section>
+
+<section id="verified"><div class="wrap">
+  <div class="reveal"><div class="kicker">Trust, but verify</div><h2>Tests assert behaviour, not just shapes.</h2>
+  <p class="lead">74 tests, run against a pure-torch tiny Llama <i>and</i> a real <code>transformers.LlamaForCausalLM</code>.</p></div>
+  <div class="checks reveal">
+    <div class="check"><i>✓</i><p><b>Exact ops keep logits unchanged:</b> fold_norm, rotate (incl. non-power-of-two &amp; biased models), permute, rescale, smooth_scale, align, kv_pool on duplicated heads.</p></div>
+    <div class="check"><i>✓</i><p><b>Abliteration:</b> the target direction's component is ≈ 0 at the embedding and after every layer's output.</p></div>
+    <div class="check"><i>✓</i><p><b>Editing:</b> ROME hits its target in a real forward pass with a rank-one update; steering shifts the residual by exactly <code>scale·v</code>.</p></div>
+    <div class="check"><i>✓</i><p><b>Pruning:</b> SparseGPT beats magnitude on correlated inputs (0.26× error), N:M patterns exact, Wanda protects hot channels.</p></div>
+    <div class="check"><i>✓</i><p><b>Maths:</b> SVD truncation matches Eckart–Young, LoRA extract→merge round-trips, DARE is unbiased, TIES elects signs correctly.</p></div>
+    <div class="check"><i>✓</i><p><b>Systems:</b> sharded save/load, tensor sharing, memory spilling and full YAML pipelines round-trip.</p></div>
+  </div>
+  <div class="honest reveal"><h3>Honest limitations</h3><ul>
+    <li>Llama-family tensor naming only (Llama, Mistral, Qwen2/3, Yi, SmolLM…). No fused-QKV (Phi-3), MoE, or Gemma-2/3 yet.</li>
+    <li>Verified on tiny models and a tiny HF Llama — not yet on multi-billion-parameter checkpoints.</li>
+    <li><code>edit_facts</code> is the closed-form half of ROME/MEMIT: you supply target values; automatic <i>v*</i> search isn't implemented.</li>
+    <li><code>quantize_rtn</code> writes dequantized weights; it isn't a packed GPTQ/AWQ export. Nothing here evaluates model quality.</li>
+  </ul></div>
+</div></section>
+
+<footer><div class="wrap">
+  <div>weightkit · Apache-2.0 · clean-room implementation of published methods</div>
+  <div><a href="https://github.com/BirgerMoell/weightkit">GitHub</a> · <a href="https://github.com/arcee-ai/mergekit">mergekit (inspiration)</a></div>
+</div></footer>
+
+<script>
+"use strict";
+/* ---------- utilities ---------- */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+
+/* theme */
+try{const t=localStorage.getItem("wk-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
+$("#theme").onclick=()=>{const d=document.documentElement;const n=d.dataset.theme==="light"?"dark":"light";d.dataset.theme=n;try{localStorage.setItem("wk-theme",n)}catch(e){};drawAll()};
+
+/* copy buttons */
+$$("[data-copy-from]").forEach(b=>b.onclick=async()=>{const t=document.getElementById(b.dataset.copyFrom).textContent;try{await navigator.clipboard.writeText(t);b.textContent="copied ✓"}catch(e){b.textContent="select & copy"}setTimeout(()=>b.textContent="copy",1600)});
+
+/* ---------- hero background: drifting weight grid ---------- */
+(function(){
+  const cv=$("#bg"),cx=cv.getContext("2d");let W,H,cells=[],t0=0;
+  function size(){const d=devicePixelRatio||1;W=cv.clientWidth;H=cv.clientHeight;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0);
+    const s=26,cols=Math.ceil(W/s)+1,rows=Math.ceil(H/s)+1,r=rng(7);cells=[];
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)cells.push({x:x*s,y:y*s,s:s-4,p:r()*6.28,f:.3+r()*.9,v:gauss(r)})}
+  function frame(t){cx.clearRect(0,0,W,H);
+    for(const c of cells){const a=Math.sin(t/1400*c.f+c.p+c.x*.01+c.y*.008);const m=Math.abs(c.v)>1.35?1:.45;
+      const al=Math.max(0,(a*.5+.5))*.26*m;if(al<.02)continue;
+      cx.fillStyle=c.v>0?`rgba(255,107,154,${al})`:`rgba(88,230,217,${al})`;cx.fillRect(c.x,c.y,c.s,c.s)}
+    if(!reduce)requestAnimationFrame(frame)}
+  size();addEventListener("resize",size);requestAnimationFrame(frame);
+})();
+
+/* hero pipeline strip */
+(function(){
+  const names=["merge","abliterate","rotate","prune","quantize_rtn"],s=$("#strip");
+  names.forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.textContent=n;s.appendChild(c);if(i<names.length-1){const a=document.createElement("span");a.className="arrow";a.textContent="→";s.appendChild(a)}});
+  const chips=$$("#strip .chip");let i=0;const tick=()=>{chips.forEach((c,j)=>c.classList.toggle("on",j===i));i=(i+1)%chips.length};tick();if(!reduce)setInterval(tick,1100)
+})();
+
+/* count-up stats */
+(function(){const io=new IntersectionObserver(es=>es.forEach(e=>{if(!e.isIntersecting)return;io.unobserve(e.target);
+  const el=e.target,n=+el.dataset.n,txt=el.dataset.text;if(txt){el.textContent=txt;return}
+  if(reduce){el.textContent=n;return}let v=0;const st=()=>{v+=Math.max(1,n/22);if(v>=n){el.textContent=n;return}el.textContent=Math.floor(v);requestAnimationFrame(st)};st()}),{threshold:.6});
+  $$("[data-n]").forEach(e=>io.observe(e))})();
+
+/* reveal on scroll */
+(function(){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12});$$(".reveal").forEach(e=>io.observe(e))})();
+
+/* ---------- linear algebra for the playground ---------- */
+const N=16;
+const zeros=()=>Array.from({length:N},()=>new Float64Array(N));
+const clone=A=>A.map(r=>Float64Array.from(r));
+const fro=A=>Math.sqrt(A.reduce((s,r)=>s+r.reduce((t,v)=>t+v*v,0),0));
+const sub=(A,B)=>A.map((r,i)=>r.map((v,j)=>v-B[i][j]));
+const matvec=(A,x)=>A.map(r=>r.reduce((s,v,j)=>s+v*x[j],0));
+const matmul=(A,B)=>A.map(r=>{const o=new Float64Array(N);for(let k=0;k<N;k++){const a=r[k];if(a)for(let j=0;j<N;j++)o[j]+=a*B[k][j]}return o});
+const transpose=A=>A.map((_,i)=>Float64Array.from(A.map(r=>r[i])));
+const vnorm=v=>Math.sqrt(v.reduce((s,x)=>s+x*x,0));
+function jacobiSVD(A){ // one-sided Jacobi: A = U diag(S) V^T
+  const U=A.map(r=>Array.from(r)), V=Array.from({length:N},(_,i)=>Array.from({length:N},(_,j)=>i===j?1:0));
+  for(let sw=0;sw<40;sw++){let rot=0;
+    for(let p=0;p<N-1;p++)for(let q=p+1;q<N;q++){let al=0,be=0,ga=0;
+      for(let i=0;i<N;i++){al+=U[i][p]**2;be+=U[i][q]**2;ga+=U[i][p]*U[i][q]}
+      if(Math.abs(ga)<=1e-13*Math.sqrt(al*be)||!ga)continue;rot++;
+      const z=(be-al)/(2*ga),t=Math.sign(z||1)/(Math.abs(z)+Math.sqrt(1+z*z)),c=1/Math.sqrt(1+t*t),s=c*t;
+      for(let i=0;i<N;i++){let a=U[i][p],b=U[i][q];U[i][p]=c*a-s*b;U[i][q]=s*a+c*b;a=V[i][p];b=V[i][q];V[i][p]=c*a-s*b;V[i][q]=s*a+c*b}}
+    if(!rot)break}
+  const S=Array.from({length:N},(_,j)=>Math.sqrt(U.reduce((s,r)=>s+r[j]**2,0)));
+  const idx=[...S.keys()].sort((a,b)=>S[b]-S[a]);
+  return {U:U.map(r=>idx.map(j=>S[j]?r[j]/S[j]:0)),S:idx.map(j=>S[j]),V:V.map(r=>idx.map(j=>r[j]))};
+}
+function hadamard(n,r){let H=[[1]];while(H.length<n){const m=H.length,G=Array.from({length:2*m},()=>new Array(2*m));
+  for(let i=0;i<m;i++)for(let j=0;j<m;j++){G[i][j]=H[i][j];G[i+m][j]=H[i][j];G[i][j+m]=H[i][j];G[i+m][j+m]=-H[i][j]}H=G}
+  const sg=Array.from({length:n},()=>r()<.5?-1:1);return H.map((row,i)=>Float64Array.from(row,v=>sg[i]*v/Math.sqrt(n)))}
+
+/* ---------- state ---------- */
+let seed=11,W,F,Dir;           // W base, F finetune, Dir random unit direction
+function build(){
+  const r=rng(seed);W=zeros();
+  for(let k=0;k<3;k++){const u=Array.from({length:N},()=>gauss(r)),v=Array.from({length:N},()=>gauss(r));const s=1.8/(k+1);
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++)W[i][j]+=s*u[i]*v[j]/Math.sqrt(N)}
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){W[i][j]+=.35*gauss(r);if(j===3||j===11)W[i][j]*=4}
+  F=clone(W);const d=zeros();for(let i=0;i<N;i++)for(let j=0;j<N;j++){d[i][j]=.8*gauss(r)*(r()<.3?1:.15);F[i][j]+=d[i][j]}
+  Dir=Float64Array.from({length:N},()=>gauss(r));const n=vnorm(Dir);Dir=Dir.map(v=>v/n);
+}
+function probes(){const r=rng(99);return Array.from({length:10},()=>Float64Array.from({length:N},()=>gauss(r)))}
+const X=probes();
+const fmt=(v,d=3)=>Math.abs(v)<1e-3&&v!==0?v.toExponential(1):(+v.toFixed(d)).toString();
+function drift(A,B){ // mean relative output change over probes
+  let s=0;for(const x of X){const a=matvec(A,x),b=matvec(B,x);s+=vnorm(a.map((v,i)=>v-b[i]))/vnorm(a)}return s/X.length}
+const zeroFrac=A=>A.reduce((s,r)=>s+r.reduce((t,v)=>t+(v===0?1:0),0),0)/(N*N);
+function colSpread(A){const c=Array.from({length:N},(_,j)=>Math.sqrt(A.reduce((s,r)=>s+r[j]**2,0)));const sorted=[...c].sort((a,b)=>a-b);return Math.max(...c)/sorted[N>>1]}
+
+/* ---------- ops ---------- */
+const OPS=[
+ {id:"prune",name:"prune",title:"Magnitude pruning",label:"sparsity",min:0,max:.95,step:.05,val:.5,
+  desc:"Zero out the smallest-magnitude weights. The cheapest compression — and it changes the function, so quality drops as sparsity rises.",
+  run(p){const f=W.flat?null:null;const all=[];W.forEach((r,i)=>r.forEach((v,j)=>all.push([Math.abs(v),i,j])));all.sort((a,b)=>a[0]-b[0]);
+    const A=clone(W);for(let k=0;k<Math.floor(all.length*p);k++){A[all[k][1]][all[k][2]]=0}return {A}},
+  met(A,p){return [["zeros",(zeroFrac(A)*100).toFixed(0)+"%"],["rel. change",fmt(fro(sub(A,W))/fro(W))],["output drift",(drift(W,A)*100).toFixed(1)+"%"],["method","magnitude"]]},
+  exact:false,code:p=>`- op: prune\n  method: magnitude\n  sparsity: ${p}`},
+ {id:"spectral",name:"spectral",title:"SVD truncation",label:"rank",min:1,max:16,step:1,val:4,
+  desc:"Rewrite the matrix through its SVD and keep only the top-r singular values (Eckart–Young optimal). Great for finding how low-rank a layer really is.",
+  run(p){const {U,S,V}=jacobiSVD(W),A=zeros();for(let k=0;k<p;k++)for(let i=0;i<N;i++)for(let j=0;j<N;j++)A[i][j]+=U[i][k]*S[k]*V[j][k];return {A}},
+  met(A,p){const S=jacobiSVD(W).S,tot=S.reduce((s,v)=>s+v*v,0),keep=S.slice(0,p).reduce((s,v)=>s+v*v,0);return [["rank kept",p+" / 16"],["energy kept",(keep/tot*100).toFixed(1)+"%"],["rel. change",fmt(fro(sub(A,W))/fro(W))],["output drift",(drift(W,A)*100).toFixed(1)+"%"]]},
+  exact:false,code:p=>`- op: spectral\n  mode: truncate\n  rank: ${p}`},
+ {id:"quantize_rtn",name:"quantize_rtn",title:"Round-to-nearest quantization",label:"bits",min:2,max:8,step:1,val:4,
+  desc:"Snap each row to 2ᵇ evenly spaced levels (asymmetric, per-row scale). The outlier columns hurt: one huge value stretches the grid for everything else.",
+  run(p){const q=2**p-1,A=zeros();for(let i=0;i<N;i++){const lo=Math.min(...W[i]),hi=Math.max(...W[i]),sc=(hi-lo)/q||1e-12,z=Math.round(-lo/sc);
+    for(let j=0;j<N;j++)A[i][j]=(Math.min(q,Math.max(0,Math.round(W[i][j]/sc)+z))-z)*sc}return {A}},
+  met(A,p){const lv=Math.max(...A.map(r=>new Set(Array.from(r,v=>v.toFixed(9))).size));return [["bits",p],["levels/row ≤",String(lv)],["rel. change",fmt(fro(sub(A,W))/fro(W))],["output drift",(drift(W,A)*100).toFixed(1)+"%"]]},
+  exact:false,code:p=>`- op: quantize_rtn\n  bits: ${p}\n  group_size: 128`},
+ {id:"abliterate",name:"abliterate",title:"Abliteration (directional ablation)",label:"strength",min:0,max:1,step:.05,val:1,
+  desc:"Orthogonalise the matrix's outputs against a direction r so the layer can no longer write r into the residual stream. This is how 'refusal directions' are removed.",
+  run(p){const rW=Array.from({length:N},(_,j)=>W.reduce((s,row,i)=>s+Dir[i]*row[j],0)),A=clone(W);
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++)A[i][j]-=p*Dir[i]*rW[j];return {A}},
+  met(A,p){const e=M=>Math.sqrt(Array.from({length:N},(_,j)=>M.reduce((s,row,i)=>s+Dir[i]*row[j],0)**2).reduce((a,b)=>a+b,0));return [["energy along r (before)",fmt(e(W))],["energy along r (after)",fmt(e(A))],["rel. change",fmt(fro(sub(A,W))/fro(W))],["output drift",(drift(W,A)*100).toFixed(1)+"%"]]},
+  exact:false,code:p=>`- op: abliterate\n  pos: harmful\n  neg: harmless\n  layer: 14\n  strength: ${p}`},
+ {id:"rotate",name:"rotate",title:"Hadamard rotation — exact",label:"seed",min:1,max:30,step:1,val:3,
+  desc:"Rotate the input basis by a random Hadamard matrix R: W′ = W·R, with inputs becoming Rᵀx. Outputs are identical, but the two outlier columns get smeared across all channels — much friendlier to quantization.",
+  run(p){const R=hadamard(N,rng(p*7919)),A=matmul(W,R);A._R=R;return {A}},
+  met(A,p){const R=A._R;let e=0;for(const x of X){const y=matvec(W,x),Rx=Float64Array.from({length:N},(_,j)=>R.reduce((s,row,i)=>s+row[j]*x[i],0)),y2=matvec(A,Rx);e=Math.max(e,vnorm(y.map((v,i)=>v-y2[i])))}
+    return [["function error",e.toExponential(1)],["outlier ratio (before)",colSpread(W).toFixed(1)+"×"],["outlier ratio (after)",colSpread(A).toFixed(1)+"×"],["rel. change",fmt(fro(sub(A,W))/fro(W))]]},
+  exact:true,code:p=>`- op: rotate\n  kind: hadamard   # fold_norm runs first`},
+ {id:"permute",name:"permute",title:"Neuron permutation — exact",label:"seed",min:1,max:30,step:1,val:5,
+  desc:"Reorder the hidden neurons of a two-layer block: rows of W₁ and columns of W₂ move together. Different weights, identical function — the basis of Git Re-Basin alignment before merging.",
+  run(p){const r=rng(p*131),perm=[...Array(N).keys()];for(let i=N-1;i>0;i--){const j=Math.floor(r()*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]]}
+    const A=perm.map(k=>Float64Array.from(W[k]));A._perm=perm;return {A}},
+  met(A,p){const perm=A._perm,r=rng(5),W2=Array.from({length:N},()=>Float64Array.from({length:N},()=>gauss(r)*.3)),W2p=W2.map(row=>Float64Array.from(perm.map(k=>row[k])));
+    const f=(a,b,x)=>matvec(b,matvec(a,x).map(v=>v/(1+Math.exp(-v))));let e=0;for(const x of X){const y=f(W,W2,x),y2=f(A,W2p,x);e=Math.max(e,vnorm(y.map((v,i)=>v-y2[i])))}
+    return [["function error",e.toExponential(1)],["rows moved",perm.filter((k,i)=>k!==i).length+" / 16"],["rel. change",fmt(fro(sub(A,W))/fro(W))],["activation","SiLU"]]},
+  exact:true,code:p=>`- op: permute\n  mlp: true\n  heads: true`},
+ {id:"task_vector",name:"task_vector",title:"Task vectors: negate · interpolate · extrapolate",label:"scale",min:-1,max:2,step:.1,val:-1,
+  desc:"Treat fine-tuning as a vector Δ = finetuned − base and apply it with any scale. Scale −1 unlearns a skill, 1 recovers the fine-tune, 2 extrapolates (ExPO). Left panel = base, middle = base + scale·Δ.",
+  run(p){const A=zeros();for(let i=0;i<N;i++)for(let j=0;j<N;j++)A[i][j]=W[i][j]+p*(F[i][j]-W[i][j]);return {A}},
+  met(A,p){const d=fro(sub(F,W));return [["scale",(+p).toFixed(1)],["|Δ|",fmt(d)],["dist. to finetune",fmt(fro(sub(A,F))/fro(W))],["dist. to base",fmt(fro(sub(A,W))/fro(W))]]},
+  exact:false,code:p=>`- op: task_vector\n  finetuned: skill_ft\n  base: skill_base\n  scale: ${(+p).toFixed(1)}`},
+];
+let cur=OPS[0],out=null;
+
+/* ---------- drawing ---------- */
+function heat(cv,A,scale){
+  const d=devicePixelRatio||1,S=cv.clientWidth||240;cv.width=S*d;cv.height=S*d;const c=cv.getContext("2d");c.setTransform(d,0,0,d,0,0);
+  const light=document.documentElement.dataset.theme==="light",bg=light?[240,242,248]:[17,20,28];
+  const cs=S/N;c.fillStyle=light?"#eef0f6":"#0b0d12";c.fillRect(0,0,S,S);
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){const v=A[i][j]/scale,m=Math.min(1,Math.abs(v)**.7),col=v>=0?[255,122,89]:[74,163,255];
+    c.fillStyle=`rgb(${bg.map((b,k)=>Math.round(b+(col[k]-b)*m)).join(",")})`;c.fillRect(j*cs+.5,i*cs+.5,cs-1,cs-1)}
+}
+function drawAll(){
+  if(!out)return;const sc=Math.max(...W.map(r=>Math.max(...r.map(Math.abs))))*.9,D=sub(out,W),ds=Math.max(1e-9,...D.map(r=>Math.max(...r.map(Math.abs))))*.95;
+  heat($("#c0"),W,sc);heat($("#c1"),out,sc);heat($("#c2"),D,ds);
+  $("#l0").textContent="‖W‖ "+fmt(fro(W),2);$("#l1").textContent="‖W′‖ "+fmt(fro(out),2);$("#l2").textContent="max "+fmt(ds/.95,2);
+}
+function update(){
+  const p=+$("#param").value;$("#pval").textContent=cur.id==="task_vector"?p.toFixed(1):(cur.step<1?p.toFixed(2):p);
+  out=cur.run(p).A;$("#plabel").textContent=cur.label;
+  $("#metrics").innerHTML=cur.met(out,p).map(([k,v])=>`<div class="m"><small>${k}</small><b>${v}</b></div>`).join("");
+  const vd=$("#verdict");if(cur.exact){vd.className="verdict ok";vd.textContent="✓ Function preserved — different weights, identical behaviour."}
+  else{vd.className="verdict warn";vd.textContent="Δ Function changes — this is an approximation / intentional edit."}
+  const code=cur.code(cur.id==="task_vector"?p:(cur.step<1?p.toFixed(2):p));
+  $("#ocode").innerHTML=code.split("\n").map(l=>l.replace(/^(\s*-?\s*)([a-z_]+):(.*)$/,(m,a,k,v)=>a+'<span class="k">'+k+'</span>:'+v.replace(/#.*/,x=>'<span class="c">'+x+'</span>').replace(/\b(-?\d+\.?\d*)\b/g,'<span class="n">$1</span>'))).join("\n");
+  drawAll();
+}
+function select(id){cur=OPS.find(o=>o.id===id);$$("#opbar .op").forEach(b=>b.setAttribute("aria-pressed",b.dataset.id===id));
+  const r=$("#param");r.min=cur.min;r.max=cur.max;r.step=cur.step;r.value=cur.val;$("#otitle").textContent=cur.title;$("#odesc").textContent=cur.desc;update()}
+OPS.forEach(o=>{const b=document.createElement("button");b.className="op";b.dataset.id=o.id;b.textContent=o.name;b.setAttribute("aria-pressed","false");b.onclick=()=>select(o.id);$("#opbar").appendChild(b)});
+$("#param").addEventListener("input",update);
+$("#reseed").onclick=()=>{seed=Math.floor(Math.random()*1e6);build();update()};
+addEventListener("resize",drawAll);
+build();select("prune");
+/* pre-select something dramatic */ setTimeout(()=>select("rotate"),0);
+
+/* ---------- catalog ---------- */
+const CAT=[
+ ["merge","merge","Merge other models: linear, slerp, model_stock, task_arithmetic, ties, dare_linear, dare_ties, breadcrumbs(+ties).",0],
+ ["delta","task_vector","Apply finetuned − base at any scale: negate, interpolate, extrapolate.",0],
+ ["delta","lora_merge","Merge a PEFT LoRA adapter: W += scale·(α/r)·BA.",0],
+ ["spectral","spectral","SVD rewrite: truncate, energy, power, clip, scale_top.",0],
+ ["prune","prune","Magnitude, Wanda, SparseGPT; layer/row/column or N:M.",0],
+ ["edit","edit_facts","Insert key→value facts into one layer (MEMIT / ROME).",0],
+ ["edit","abliterate","Directional ablation across embeddings, o_proj and down_proj.",0],
+ ["edit","steer_bias","Bake an activation-steering vector into the weights.",0],
+ ["transform","fold_norm","Fold RMSNorm scales into following linears.",1],
+ ["transform","rotate","Hadamard / random rotation of the residual stream (QuaRot-style).",1],
+ ["transform","permute","Permute MLP neurons and attention heads.",1],
+ ["transform","rescale","Cross-layer equalization across up/down and v/o pairs.",1],
+ ["transform","smooth_scale","SmoothQuant/AWQ-style activation-aware scaling.",1],
+ ["transform","align","Re-Basin permutation alignment of another model before merging.",1],
+ ["surgery","layer_stack","Frankenmerge / depth up-scaling from layer slices.",0],
+ ["surgery","drop_layers","Remove decoder layers by index.",0],
+ ["surgery","prune_mlp","Structured: remove least-important MLP neurons.",0],
+ ["surgery","prune_heads","Structured: remove whole KV-head groups.",0],
+ ["surgery","kv_pool","MHA → GQA by mean-pooling K/V heads.",0],
+ ["surgery","untie_embeddings","Give the model its own lm_head.",1],
+ ["surgery","tie_embeddings","Share the embedding matrix with the head.",0],
+ ["surgery","resize_vocab","Truncate or extend the vocabulary.",0],
+ ["surgery","perturb","Add scaled gaussian noise.",0],
+ ["surgery","cast","Convert floating-point dtype.",0],
+ ["quant","quantize_rtn","Group-wise round-to-nearest, written as dequantized weights.",0],
+];
+(function(){
+  const fams=["all",...new Set(CAT.map(c=>c[0]))];let cf="all";
+  const fam=$("#fam"),cat=$("#cat");
+  function render(){cat.innerHTML=CAT.filter(c=>cf==="all"||c[0]===cf).map(c=>`<div class="item"><h4>${c[1]}${c[3]?'<span class="tag exact">exact</span>':`<span class="tag">${c[0]}</span>`}</h4><p>${c[2]}</p></div>`).join("");
+    $$("#fam button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===cf))}
+  fams.forEach(f=>{const b=document.createElement("button");b.dataset.f=f;b.textContent=f+(f==="all"?` (${CAT.length})`:` (${CAT.filter(c=>c[0]===f).length})`);b.onclick=()=>{cf=f;render()};fam.appendChild(b)});
+  render();
+})();
+</script>
+</body>
+</html>
