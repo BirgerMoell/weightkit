@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weightkit"
+version = "0.1.0"
+description = "A unified toolkit for directly editing neural-network weights: merging, pruning, model editing, abliteration, rotations, SVD surgery, LoRA and more."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+dependencies = ["torch>=2.0", "safetensors>=0.4", "pyyaml>=6"]
+
+[project.optional-dependencies]
+hf = ["transformers>=4.40", "huggingface_hub"]
+fast = ["scipy"]
+test = ["pytest>=7", "scipy", "transformers>=4.40"]
+
+[project.scripts]
+weightkit = "weightkit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]

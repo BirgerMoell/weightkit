@@ -1,0 +1,18 @@
+# Remove a behaviour direction, then make the model 2:4 sparse.
+# 1) weightkit calibrate ./Llama-3-8B calib.pt --text wiki.txt --xtx \
+#      --hidden harmful=harmful.txt --hidden harmless=harmless.txt --hidden-layers 14
+base: ./Llama-3-8B
+calibration: ./calib.pt
+dtype: float32
+output: ./Llama-3-8B-abliterated-2of4
+save_dtype: bfloat16
+steps:
+  - op: untie_embeddings            # no-op for untied models; required if tied
+  - op: abliterate
+    pos: harmful
+    neg: harmless
+    layer: 14
+  - op: prune
+    method: sparsegpt
+    nm: [2, 4]
+    roles: [mlp]

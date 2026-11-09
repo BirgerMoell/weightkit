@@ -1,0 +1,16 @@
+# Make a model friendlier to low-bit quantization without changing its function,
+# then simulate 4-bit RTN to inspect the damage with `weightkit diff`.
+base: ./Llama-3-8B
+calibration: ./calib.pt             # needs input norms for smooth_scale
+output: ./Llama-3-8B-w4-ready
+steps:
+  - op: untie_embeddings
+  - op: smooth_scale                # SmoothQuant/AWQ-style, exact
+    alpha: 0.5
+  - op: rescale                     # cross-layer equalization, exact
+    mode: equalize
+  - op: rotate                      # QuaRot-style Hadamard rotation, exact
+    kind: hadamard
+  - op: quantize_rtn
+    bits: 4
+    group_size: 128

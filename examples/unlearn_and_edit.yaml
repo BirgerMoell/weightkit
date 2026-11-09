@@ -1,0 +1,16 @@
+# Subtract a skill (task-vector negation) and inject facts.
+base: ./instruct-model
+models:
+  skill_ft: ./finetune-with-skill
+  skill_base: ./finetune-base
+calibration: ./calib.pt             # --xtx for the layer you edit
+output: ./edited
+steps:
+  - op: task_vector
+    finetuned: skill_ft
+    base: skill_base
+    scale: -0.5                     # negative = unlearn
+  - op: edit_facts                  # keys/values: see README "Editing facts"
+    edits: ./edits.pt
+    layer: 8
+    mode: memit
