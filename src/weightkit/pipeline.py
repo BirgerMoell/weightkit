@@ -15,7 +15,7 @@ from .store import TensorStore
 
 _KNOWN = {
     "base", "models", "calibration", "arch", "dtype", "device", "seed", "steps",
-    "output", "save_dtype", "max_shard_size_gb", "spill_gb",
+    "output", "save_dtype", "max_shard_size_gb", "spill_gb", "verify",
 }
 
 
@@ -25,7 +25,7 @@ def _dtype(name):
     return getattr(torch, name)
 
 
-def run_pipeline(config: Union[str, dict], log: Callable[[str], None] = print) -> TensorStore:
+def run_pipeline(config: Union[str, dict], log: Callable[[str], None] = print, runner=None) -> TensorStore:
     """Execute a pipeline config (path to YAML or a dict).  See README."""
     if isinstance(config, str):
         with open(config) as f:
@@ -70,4 +70,17 @@ def run_pipeline(config: Union[str, dict], log: Callable[[str], None] = print) -
             dtype=_dtype(config.get("save_dtype")),
         )
         log(f"saved -> {config['output']}")
+        if config.get("verify"):
+            from .verify import VerificationFailed, format_results, verify
+
+            v = config["verify"]
+            spec = dict(v) if isinstance(v, dict) else {"checks": list(v)}
+            spec.setdefault("model", config["output"])
+            spec.setdefault("reference", config["base"])
+            results = verify(spec, runner=runner)
+            log(format_results(results))
+            if not all(r.ok for r in results):
+                raise VerificationFailed(results)
+    elif config.get("verify"):
+        raise ValueError("`verify` needs `output` (checks run on the saved checkpoint)")
     return state

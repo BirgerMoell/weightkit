@@ -94,3 +94,36 @@ def test_wanda_with_hf_calibration(hf, tmp_path):
     out = pipe(hf, tmp_path, [dict(op="prune", method="wanda", sparsity=0.5)], calibration=str(tmp_path / "c.pt"))
     w = TensorStore.from_path(out)["model.layers.1.mlp.down_proj.weight"]
     assert abs((w == 0).float().mean().item() - 0.5) < 0.01
+
+
+def test_growth_ops_exact_on_real_hf_with_default_verify_runner(hf, tmp_path):
+    """widen_mlp + add_layers + rotate must leave a real HF Llama's logits unchanged,
+    checked by weightkit's own `verify` using the default transformers runner."""
+    _, d = hf
+    out = str(tmp_path / "grown")
+    run_pipeline(
+        dict(
+            base=d, output=out, seed=1,
+            steps=[dict(op="widen_mlp", extra=32, mode="split"), dict(op="add_layers", after=[0, 1]), dict(op="rotate")],
+            verify=[
+                dict(type="equivalence", tol=1e-4),
+                dict(type="config", expect=dict(num_hidden_layers=5, intermediate_size=160)),
+                dict(type="data_use", allowed=["none"]),
+                dict(type="finite"),
+            ],
+        ),
+        log=lambda s: None,
+    )
+
+
+def test_verify_catches_non_exact_edit_on_real_hf(hf, tmp_path):
+    from weightkit.verify import VerificationFailed
+
+    _, d = hf
+    with pytest.raises(VerificationFailed) as e:
+        run_pipeline(
+            dict(base=d, output=str(tmp_path / "p"), steps=[dict(op="prune", method="magnitude", sparsity=0.5)],
+                 verify=[dict(type="equivalence", tol=1e-4)]),
+            log=lambda s: None,
+        )
+    assert not e.value.results[0].ok

@@ -6,7 +6,7 @@
 <title>weightkit — edit neural-network weights directly</title>
 <meta name="description" content="One composable toolkit for every way of changing a network's weights directly: merging, pruning, ROME/MEMIT, abliteration, rotations, SVD surgery, LoRA.">
 <meta property="og:title" content="weightkit — edit neural-network weights directly">
-<meta property="og:description" content="25 composable weight-editing ops. No gradient descent. Try them live on a real matrix.">
+<meta property="og:description" content="27 composable weight-editing ops. No gradient descent. Try them live on a real matrix.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c11">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0c11'/><g fill='%2358e6d9'><rect x='6' y='6' width='6' height='6'/><rect x='20' y='6' width='6' height='6' fill='%23ff6b9a'/><rect x='13' y='13' width='6' height='6' fill='%238b7bff'/><rect x='6' y='20' width='6' height='6' fill='%238b7bff'/><rect x='20' y='20' width='6' height='6'/></g></svg>">
@@ -130,6 +130,14 @@ pre.code{margin:0;background:#090b10;color:#d6deef;border:1px solid var(--line);
 @media(max-width:900px){.prov{grid-template-columns:1fr}}
 .prov pre.code{font-size:12.5px;white-space:pre}
 
+
+/* verify */
+.vgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:30px}
+@media(max-width:900px){.vgrid{grid-template-columns:1fr}}
+.vgrid pre.code{font-size:12.5px;white-space:pre}
+.vgrid .k2{font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.vgrid .pass{color:var(--green)} .vgrid .fail{color:var(--pink)}
+
 /* why */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
 @media(max-width:900px){.grid3{grid-template-columns:1fr}}
@@ -185,7 +193,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 <nav><div class="wrap">
   <a class="logo" href="#top"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>weightkit</a>
   <div class="links">
-    <a class="l" href="#playground">Playground</a><a class="l" href="#circuits">Circuit lab</a><a class="l" href="#ops">Ops</a><a class="l" href="#pipeline">Pipelines</a><a class="l" href="#verified">Verified</a>
+    <a class="l" href="#playground">Playground</a><a class="l" href="#circuits">Circuit lab</a><a class="l" href="#verify">Verify</a><a class="l" href="#ops">Ops</a><a class="l" href="#pipeline">Pipelines</a><a class="l" href="#verified">Verified</a>
     <button class="btn icon-btn" id="theme" aria-label="Toggle light/dark theme">◐</button>
     <a class="btn" href="https://github.com/BirgerMoell/weightkit">★ GitHub</a>
   </div>
@@ -194,7 +202,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 <header class="hero" id="top">
   <canvas id="bg" aria-hidden="true"></canvas>
   <div class="wrap">
-    <span class="pill"><b>●</b> v0.1.0 &nbsp;·&nbsp; Apache-2.0 &nbsp;·&nbsp; 104 tests passing</span>
+    <span class="pill"><b>●</b> v0.1.0 &nbsp;·&nbsp; Apache-2.0 &nbsp;·&nbsp; 129 tests passing</span>
     <h1>Edit a neural network's <span class="grad">weights directly.</span></h1>
     <p class="sub">Merging, pruning, ROME/MEMIT, abliteration, rotations, SVD surgery, LoRA — every way of changing weights without training, behind <b>one composable op API</b>.</p>
     <div class="cta">
@@ -204,9 +212,9 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
     <div class="install"><span>$</span><code id="inst">pip install git+https://github.com/BirgerMoell/weightkit</code><button class="copy" data-copy-from="inst">copy</button></div>
     <div class="strip" id="strip" aria-label="Example pipeline"></div>
     <div class="stats">
-      <div><b data-n="25">0</b><small>composable ops</small></div>
+      <div><b data-n="27">0</b><small>composable ops</small></div>
       <div><b data-n="9">0</b><small>merge methods</small></div>
-      <div><b data-n="6">0</b><small>exact transforms</small></div>
+      <div><b data-n="8">0</b><small>exact transforms</small></div>
       <div><b data-n="0" data-text="0 grads">0</b><small>gradient steps</small></div>
     </div>
   </div>
@@ -298,8 +306,55 @@ provenance (weightkit_manifest.json):
   </div>
 </div></section>
 
+
+<section id="verify"><div class="wrap">
+  <div class="reveal"><div class="kicker">Verify</div>
+  <h2>The weights are the spec. <span class="grad">So test them.</span></h2>
+  <p class="lead">Add a <code>verify:</code> block to a pipeline (or run <code>weightkit verify spec.yaml</code> on any saved model). Checks run on the <i>saved</i> checkpoint, and a failure exits non-zero, so a bad edit can't slip through CI. Checks: <code>equivalence</code>, <code>sparsity</code>, <code>untouched</code>, <code>changed</code>, <code>max_rel_change</code>, <code>direction_removed</code>, <code>config</code>, <code>data_use</code>, <code>ops</code>, <code>finite</code>.</p></div>
+  <div class="vgrid reveal">
+    <div>
+      <div class="k2 pass">✓ exact ops: grow, deepen, rotate</div>
+<pre class="code"><span class="k">steps</span>:
+  - {op: widen_mlp, extra: <span class="n">32</span>, mode: split}
+  - {op: add_layers, after: [<span class="n">0</span>, <span class="n">1</span>]}
+  - {op: rotate}
+<span class="k">verify</span>:
+  - {type: equivalence, tol: <span class="n">1.0e-4</span>}
+  - {type: config, expect: {num_hidden_layers: <span class="n">5</span>}}
+  - {type: data_use, allowed: [none]}
+
+[1/3] widen_mlp
+[2/3] add_layers
+add_layers: 3 -&gt; 5 layers (identity copies at [1, 3])
+[3/3] rotate
+saved -&gt; ./grown
+✓ equivalence        max |Δlogit| = 5.66e-07 (tol 0.0001), top-1 agreement 100.0% on (8, 16) probes
+✓ config             config as expected
+✓ data_use           data used: [&#x27;none&#x27;] (allowed: [&#x27;none&#x27;])
+✓ ops                ops [&#x27;widen_mlp&#x27;, &#x27;add_layers&#x27;, &#x27;rotate&#x27;] (want subsequence [&#x27;widen_mlp&#x27;, &#x27;add_layers&#x27;, &#x27;rotate&#x27;])
+4/4 checks passed</pre>
+    </div>
+    <div>
+      <div class="k2 fail">✗ a 50% prune is not function-preserving</div>
+<pre class="code"><span class="k">steps</span>:
+  - {op: prune, method: magnitude, sparsity: <span class="n">0.5</span>}
+<span class="k">verify</span>:
+  - {type: equivalence, tol: <span class="n">1.0e-4</span>}
+  - {type: sparsity, min: <span class="n">0.45</span>, max: <span class="n">0.55</span>}
+
+[1/1] prune
+prune/magnitude: 50.0% of 110592 weights are zero
+saved -&gt; ./pruned
+✗ equivalence        max |Δlogit| = 0.394 (tol 0.0001), top-1 agreement 50.8% on (8, 16) probes
+✓ sparsity           50.0% zeros over 21 tensors (want 45%–55%)
+1/2 checks passed</pre>
+    </div>
+  </div>
+  <p class="note reveal">Real output from a tiny Hugging Face <code>LlamaForCausalLM</code> (3 layers, width 64). The grown, deepened (3→5 layers, MLP 128→160) and rotated model differs from the original by 5.7e-7 in logits; the prune is correctly rejected. <code>widen_mlp</code> and <code>add_layers</code> are the exact opposites of <code>prune_mlp</code> and <code>drop_layers</code>: they create capacity without changing behaviour, ready for training or for writing a hand-designed circuit into.</p>
+</div></section>
+
 <section id="ops" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
-  <div class="reveal"><div class="kicker">The catalog</div><h2>25 ops. One interface.</h2>
+  <div class="reveal"><div class="kicker">The catalog</div><h2>27 ops. One interface.</h2>
   <p class="lead">Filter by family. <span class="tag exact">exact</span> marks transforms that preserve the network's function.</p></div>
   <div class="fam" id="fam" role="group" aria-label="Filter by family"></div>
   <div class="cat" id="cat"></div>
@@ -372,7 +427,7 @@ weightkit calibrate ./model calib.pt --text corpus.txt --xtx</pre>
 
 <section id="verified"><div class="wrap">
   <div class="reveal"><div class="kicker">Trust, but verify</div><h2>Tests assert behaviour, not just shapes.</h2>
-  <p class="lead">104 tests (84 without the optional handnet fixtures), run against a pure-torch tiny Llama <i>and</i> a real <code>transformers.LlamaForCausalLM</code>.</p></div>
+  <p class="lead">129 tests (109 without the optional handnet fixtures), run against a pure-torch tiny Llama <i>and</i> a real <code>transformers.LlamaForCausalLM</code>.</p></div>
   <div class="checks reveal">
     <div class="check"><i>✓</i><p><b>Exact ops keep logits unchanged:</b> fold_norm, rotate (incl. non-power-of-two &amp; biased models), permute, rescale, smooth_scale, align, kv_pool on duplicated heads.</p></div>
     <div class="check"><i>✓</i><p><b>Abliteration:</b> the target direction's component is ≈ 0 at the embedding and after every layer's output.</p></div>
@@ -585,6 +640,8 @@ const CAT=[
  ["surgery","prune_mlp","Structured: remove least-important MLP neurons.",0],
  ["surgery","prune_heads","Structured: remove whole KV-head groups.",0],
  ["surgery","kv_pool","MHA → GQA by mean-pooling K/V heads.",0],
+ ["surgery","widen_mlp","Add MLP neurons without changing the function (Net2Net): inert or split copies.",1],
+ ["surgery","add_layers","Insert identity decoder layers (o/down zeroed): depth up-scaling that starts exact.",1],
  ["surgery","untie_embeddings","Give the model its own lm_head.",1],
  ["surgery","tie_embeddings","Share the embedding matrix with the head.",0],
  ["surgery","resize_vocab","Truncate or extend the vocabulary.",0],

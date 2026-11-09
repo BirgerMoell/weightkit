@@ -36,8 +36,24 @@ def cmd_run(args) -> int:
         cfg = yaml.safe_load(f)
     if args.output:
         cfg["output"] = args.output
-    run_pipeline(cfg, log=_log)
+    from .verify import VerificationFailed
+
+    try:
+        run_pipeline(cfg, log=_log)
+    except VerificationFailed:
+        return 1
     return 0
+
+
+def cmd_verify(args) -> int:
+    from .verify import format_results, verify
+
+    results = verify(args.spec)
+    if args.json:
+        print(json.dumps([r.__dict__ for r in results], indent=2))
+    else:
+        print(format_results(results))
+    return 0 if all(r.ok for r in results) else 1
 
 
 def cmd_apply(args) -> int:
@@ -135,6 +151,11 @@ def main(argv=None) -> int:
     s.add_argument("config")
     s.add_argument("-o", "--output", help="override output dir")
     s.set_defaults(fn=cmd_run)
+
+    s = sub.add_parser("verify", help="check a saved model against a declarative spec (exit 1 on failure)")
+    s.add_argument("spec")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_verify)
 
     s = sub.add_parser("apply", help="apply a single op")
     s.add_argument("model")

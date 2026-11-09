@@ -58,7 +58,7 @@ pip install -e ".[hf,fast]" # + transformers (calibrate CLI) + scipy (exact Hung
 
 ## Operations
 
-`weightkit ops -v` prints the live list with parameters. Currently 25 ops:
+`weightkit ops -v` prints the live list with parameters. Currently 27 ops:
 
 | family | ops |
 |---|---|
@@ -67,8 +67,9 @@ pip install -e ".[hf,fast]" # + transformers (calibrate CLI) + scipy (exact Hung
 | **spectral** | `spectral` — `truncate`, `energy`, `power`, `clip`, `scale_top` |
 | **prune** | `prune` — `magnitude`, `wanda`, `sparsegpt`; granularity layer/row/column/**global**; `nm: [n, m]` |
 | **edit** | `edit_facts` (MEMIT / ROME), `abliterate`, `steer_bias` |
+| **grow** (exact) | `widen_mlp` (Net2Net: inert or split neurons), `add_layers` (identity decoder layers) |
 | **transform** (exact) | `fold_norm`, `rotate`, `permute`, `rescale`, `smooth_scale`, `align` |
-| **surgery** | `layer_stack`, `drop_layers`, `prune_mlp`, `prune_heads`, `kv_pool`, `untie_embeddings`, `tie_embeddings`, `resize_vocab`, `perturb`, `cast` |
+| **surgery** | `layer_stack`, `drop_layers`, `prune_mlp`, `prune_heads`, `widen_mlp`, `add_layers`, `kv_pool`, `untie_embeddings`, `tie_embeddings`, `resize_vocab`, `perturb`, `cast` |
 | **quant** | `quantize_rtn` |
 
 Most ops accept a *selection*: `roles` (`q k v o gate up down attn mlp all_linear embed lm_head ...`), `layers` (`"0-7,-1"`), `include`/`exclude` globs on tensor names.
@@ -131,6 +132,26 @@ Every checkpoint saved after ops gets a `weightkit_manifest.json`: each op with 
 
 `inspect` is also how you catch ordering mistakes: `prune` followed by `rotate` leaves **0% zeros**, because the rotation re-densifies the weights. Rotate first, then prune.
 
+## Verify: the weights are the spec
+
+```yaml
+base: ./Llama-3-8B
+output: ./out
+steps:
+  - {op: widen_mlp, extra: 1024, mode: split}   # exact growth
+  - {op: add_layers, after: [7, 15, 23]}        # exact depth up-scaling
+  - {op: rotate}
+verify:                                         # runs on the saved checkpoint; failure => exit 1
+  - {type: equivalence, tol: 1.0e-4}            # logits match the base on random probes
+  - {type: config, expect: {num_hidden_layers: 35}}
+  - {type: data_use, allowed: [none]}           # edited with no outside data
+  - {type: ops, contains: [widen_mlp, rotate]}
+```
+
+or `weightkit verify spec.yaml` on any saved model. Checks: `finite`, `equivalence` (max logit difference + top-1 agreement, via transformers by default or your own `runner`), `sparsity`, `untouched`, `changed`, `max_rel_change`, `direction_removed`, `config`, `data_use`, `ops`. A check that cannot run (e.g. no reference given) fails with the reason rather than passing silently.
+
+`widen_mlp` and `add_layers` are the exact duals of `prune_mlp` / `drop_layers`: they add capacity (inert neurons, identity layers with `o_proj`/`down_proj` zeroed) without changing the function. Verified exact on a real HF Llama: a grown, deepened and rotated model differs from the original by ~6e-7 in logits.
+
 ## Circuit lab: ground-truth testing with hand-written networks
 
 [handnet](https://github.com/BirgerMoell/handnet) contains transformers whose weights were *written by hand* (addition with carry, Dyck-1 brackets, induction), exactly 100% accurate with only 1–14% non-zero weights. That gives weight-editing ops something rare: a known right answer. `weightkit.circuits` bridges them into a `TensorStore`; `scripts/circuit_lab.py` measures the curves shown on the [site](https://birgermoell.github.io/weightkit/#circuits).
@@ -149,7 +170,7 @@ pytest tests/test_circuits.py
 
 ## Testing & what is verified
 
-`pytest` runs 104 tests (84 without the optional handnet fixtures). Beyond shape checks, they assert behaviour:
+`pytest` runs 129 tests (109 without the optional handnet fixtures). Beyond shape checks, they assert behaviour:
 
 * every function-preserving op (`fold_norm`, `rotate` incl. non-power-of-two and biased models, `permute`, `rescale`, `smooth_scale`, `align`, `kv_pool` on duplicated heads, tie/untie, no-op `prune_*`) leaves **logits unchanged**, on a pure-torch tiny Llama *and* a real `transformers.LlamaForCausalLM`;
 * `abliterate` makes the residual stream's component along `r` ≈ 0 at the embedding and after every layer;
@@ -169,7 +190,7 @@ pytest tests/test_circuits.py
 
 ## Roadmap
 
-GPTQ/AWQ-style calibrated quantization, automatic `v*` search for edits, MoE and fused-QKV architectures, DELLA/SCE/Arcee-fusion style merges, multi-layer MEMIT spreading, evolutionary parameter search over pipelines.
+GPTQ/AWQ-style calibrated quantization, `graft` (write a hand-designed circuit into grown capacity), automatic `v*` search for edits, MoE and fused-QKV architectures, DELLA/SCE/Arcee-fusion style merges, multi-layer MEMIT spreading, evolutionary parameter search over pipelines.
 
 ## Credits
 

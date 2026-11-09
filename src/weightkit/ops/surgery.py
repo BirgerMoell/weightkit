@@ -236,3 +236,97 @@ class Cast(Op):
             if t.is_floating_point() and t.dtype != self.dtype:
                 ctx.state[n] = t.to(self.dtype)
         ctx.state.config["torch_dtype"] = str(self.dtype).replace("torch.", "")
+
+
+# ------------------------------------------------------------- exact growth ops
+@register("widen_mlp", "surgery")
+class WidenMLP(Op):
+    """Add MLP neurons to every layer **without changing the function** (Net2Net).
+
+    Give ``extra`` (count) or ``ratio`` (fraction of the current width).
+    mode: zero   new gate/up rows ~ N(0, init_std), new down columns exactly 0
+                 (the neurons are inert until trained, or until you write a circuit into them)
+          split  duplicate randomly chosen neurons and halve both copies' down columns
+                 (exact because silu(g)*u is identical in the copy)
+    Updates ``intermediate_size``.  The dual of ``prune_mlp``.
+    """
+
+    def __init__(self, extra: Optional[int] = None, ratio: Optional[float] = None, mode: str = "zero", init_std: float = 0.02):
+        if (extra is None) == (ratio is None):
+            raise ValueError("give exactly one of extra / ratio")
+        if mode not in ("zero", "split"):
+            raise ValueError("mode must be zero or split")
+        self.extra, self.ratio, self.mode, self.init_std = extra, ratio, mode, init_std
+
+    def run(self, ctx: Context) -> None:
+        a, s = ctx.arch, ctx.state
+        ids = a.layer_ids(s)
+        n = s[a.layer_name(ids[0], "up")].shape[0]
+        extra = self.extra if self.extra is not None else max(1, int(round(n * self.ratio)))
+        if self.mode == "split" and extra > n:
+            raise ValueError(f"split mode can add at most {n} neurons (one copy each); got {extra}")
+        for i in ids:
+            gn, un, dn = (a.layer_name(i, r) for r in ("gate", "up", "down"))
+            G, U, Dm = ctx.get(gn), ctx.get(un), ctx.get(dn)
+            if self.mode == "zero":
+                gen = ctx.generator()
+                nG = self.init_std * torch.randn(extra, G.shape[1], generator=gen).to(G)
+                nU = self.init_std * torch.randn(extra, U.shape[1], generator=gen).to(U)
+                nD = torch.zeros(Dm.shape[0], extra).to(Dm)
+                nbg = nbu = torch.zeros(extra)
+            else:
+                idx = torch.randperm(n, generator=ctx.generator())[:extra]
+                Dm = Dm.clone()
+                Dm[:, idx] *= 0.5
+                nG, nU, nD = G[idx], U[idx], Dm[:, idx]
+                nbg = ctx.get(a.layer_name(i, "gate", "bias"))[idx] if a.layer_name(i, "gate", "bias") in s else torch.zeros(extra)
+                nbu = ctx.get(a.layer_name(i, "up", "bias"))[idx] if a.layer_name(i, "up", "bias") in s else torch.zeros(extra)
+            ctx.write(gn, torch.cat([G, nG], 0))
+            ctx.write(un, torch.cat([U, nU], 0))
+            ctx.write(dn, torch.cat([Dm, nD], 1))
+            for role, nb in (("gate", nbg), ("up", nbu)):
+                bn = a.layer_name(i, role, "bias")
+                if bn in s:
+                    ctx.write(bn, torch.cat([ctx.get(bn), nb.to(ctx.device, ctx.dtype)], 0))
+        s.config["intermediate_size"] = n + extra
+
+
+@register("add_layers", "surgery")
+class AddLayers(Op):
+    """Insert new decoder layers that are **exact identities** (depth up-scaling
+    that starts from the unchanged function).  Each new layer is a copy of its
+    neighbour with ``o_proj`` and ``down_proj`` (and their biases) zeroed, so
+    it adds nothing to the residual stream until trained or edited.
+
+    ``after``: layers after which to insert a copy (e.g. ``[7, 15, 23]`` or
+    ``"7,15"``), or ``count``: insert that many, evenly spaced."""
+
+    def __init__(self, after=None, count: Optional[int] = None):
+        if (after is None) == (count is None):
+            raise ValueError("give exactly one of `after` / `count`")
+        self.after, self.count = after, count
+
+    def run(self, ctx: Context) -> None:
+        a, s = ctx.arch, ctx.state
+        n = a.n_layers(s)
+        if self.after is not None:
+            after = parse_layers(self.after, n)
+        else:
+            if not 1 <= self.count <= n:
+                raise ValueError(f"count must be in [1, {n}]")
+            after = sorted({int((j + 1) * n / (self.count + 1)) - 1 for j in range(self.count)} or {0})
+            after = [max(0, i) for i in after]
+        indices, new_pos = [], []
+        for i in range(n):
+            indices.append(i)
+            if i in after:
+                indices.append(i)
+                new_pos.append(len(indices) - 1)
+        _restack(ctx, indices)
+        for j in new_pos:
+            for role in ("o", "down"):
+                for kind in ("weight", "bias"):
+                    nm = a.layer_name(j, role, kind)
+                    if nm in s:
+                        ctx.write(nm, torch.zeros_like(s[nm]))
+        ctx.log(f"add_layers: {n} -> {len(indices)} layers (identity copies at {new_pos})")
