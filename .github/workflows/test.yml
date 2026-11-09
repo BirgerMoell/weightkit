@@ -2,8 +2,9 @@ name: tests
 on: [push, pull_request]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04   # 3.9 is not built for ubuntu-latest (26.04)
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.9", "3.11", "3.12"]
     steps:
