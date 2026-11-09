@@ -111,6 +111,25 @@ pre.code{margin:0;background:#090b10;color:#d6deef;border:1px solid var(--line);
 .legend i{display:inline-block;width:70px;height:8px;border-radius:5px;background:linear-gradient(90deg,#4aa3ff,#12151d,#ff7a59)}
 .note{color:var(--dim);font-size:13px;margin-top:14px}
 
+
+/* circuit lab */
+.cl-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:28px 0 18px}
+.cl-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.cl-meta .m{flex:1;min-width:140px}
+.charts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:980px){.charts{grid-template-columns:1fr}}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+.chart h4{margin:0 0 2px;font:700 14px var(--mono)} .chart p{margin:0 0 10px;color:var(--dim);font-size:13px}
+.chart canvas{width:100%;height:230px;display:block}
+.key{display:flex;gap:14px;font:12px var(--mono);color:var(--mut);margin-top:8px;flex-wrap:wrap}
+.key i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.finding{margin-top:18px;padding:16px 18px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--mut);font-size:15px}
+.finding b{color:var(--text)}
+.found{border-color:color-mix(in srgb,var(--amber) 40%,transparent);background:color-mix(in srgb,var(--amber) 6%,transparent)}
+.prov{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-top:34px}
+@media(max-width:900px){.prov{grid-template-columns:1fr}}
+.prov pre.code{font-size:12.5px;white-space:pre}
+
 /* why */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
 @media(max-width:900px){.grid3{grid-template-columns:1fr}}
@@ -166,7 +185,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 <nav><div class="wrap">
   <a class="logo" href="#top"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>weightkit</a>
   <div class="links">
-    <a class="l" href="#playground">Playground</a><a class="l" href="#ops">Ops</a><a class="l" href="#pipeline">Pipelines</a><a class="l" href="#verified">Verified</a>
+    <a class="l" href="#playground">Playground</a><a class="l" href="#circuits">Circuit lab</a><a class="l" href="#ops">Ops</a><a class="l" href="#pipeline">Pipelines</a><a class="l" href="#verified">Verified</a>
     <button class="btn icon-btn" id="theme" aria-label="Toggle light/dark theme">◐</button>
     <a class="btn" href="https://github.com/BirgerMoell/weightkit">★ GitHub</a>
   </div>
@@ -175,7 +194,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 <header class="hero" id="top">
   <canvas id="bg" aria-hidden="true"></canvas>
   <div class="wrap">
-    <span class="pill"><b>●</b> v0.1.0 &nbsp;·&nbsp; Apache-2.0 &nbsp;·&nbsp; 74 tests passing</span>
+    <span class="pill"><b>●</b> v0.1.0 &nbsp;·&nbsp; Apache-2.0 &nbsp;·&nbsp; 104 tests passing</span>
     <h1>Edit a neural network's <span class="grad">weights directly.</span></h1>
     <p class="sub">Merging, pruning, ROME/MEMIT, abliteration, rotations, SVD surgery, LoRA — every way of changing weights without training, behind <b>one composable op API</b>.</p>
     <div class="cta">
@@ -232,6 +251,50 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
     <div class="why reveal"><span class="num">01</span><h3>One Op abstraction</h3><p>Every method is a registered class with typed parameters. A new method is ~20 lines. Single-model and multi-model ops are the same thing — so <i>merge → abliterate → prune</i> is a pipeline, not three tools.</p></div>
     <div class="why reveal"><span class="num">02</span><h3>Exact transforms, proven exact</h3><p>Norm folding, Hadamard rotation, permutation, rescaling, SmoothQuant scaling, Re-Basin alignment — each is tested to leave logits unchanged, including on a real Hugging Face Llama.</p></div>
     <div class="why reveal"><span class="num">03</span><h3>Lazy, spillable, shared</h3><p>Tensors load on demand; edits spill to temp safetensors past a memory budget. One calibration file feeds Wanda, SparseGPT, MEMIT, SmoothQuant and abliteration.</p></div>
+  </div>
+</div></section>
+
+
+<section id="circuits" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="reveal"><div class="kicker">Circuit lab</div>
+  <h2>Ground truth, from networks <span class="grad">written by hand.</span></h2>
+  <p class="lead">Ideas from <a href="https://github.com/BirgerMoell/handnet" style="color:var(--cyan)">handnet</a>: transformers whose weights were reasoned, not trained, solve addition, bracket matching and induction at <b>100%</b> with only 1–14% non-zero weights. We know exactly which weights matter, so weightkit's ops can be tested against the answer.</p></div>
+  <div class="cl-tabs" id="cltabs" role="group" aria-label="Circuit"></div>
+  <div class="cl-meta" id="clmeta"></div>
+  <div class="charts reveal">
+    <div class="chart"><h4>Pruning</h4><p>accuracy vs. % of designed weights kept (smallest removed first)</p><canvas id="ch1" aria-label="Pruning curve"></canvas>
+      <div class="key"><span><i style="background:var(--cyan)"></i>global magnitude</span><span><i style="background:var(--pink)"></i>layer-wise</span></div></div>
+    <div class="chart"><h4>Quantization</h4><p>accuracy vs. bits (round-to-nearest, per row)</p><canvas id="ch2" aria-label="Quantization chart"></canvas></div>
+    <div class="chart"><h4>Weight noise</h4><p>accuracy vs. relative noise std (5 seeds: mean, min–max)</p><canvas id="ch3" aria-label="Noise chart"></canvas></div>
+  </div>
+  <div class="finding" id="clfind"></div>
+  <div class="finding found"><b>The testbed paid for itself.</b> Building it exposed two real bugs in weightkit's own ops that the logit-based tests had missed: <code>perturb</code> returned NaN for one-element tensors, and <code>spectral</code> (power mode) returned NaN for all-zero matrices. Both are fixed and covered by regression tests. It also showed that <i>global</i> magnitude pruning was missing, so that was added.</div>
+
+  <div class="prov reveal">
+    <div>
+      <div class="kicker" style="margin-bottom:8px">weightkit inspect — real output</div>
+<pre class="code">27.36K parameters · 27.36K non-zero · 0.0% zeros · 30 tensors
+config: model_type=llama, hidden_size=32, num_hidden_layers=3, num_attention_heads=4, num_key_value_heads=2, intermediate_size=48, vocab_size=64
+tensor                                               shape             zeros   |W|max  outl.
+lm_head.weight                                       (64, 32)           0.0%    0.738    1.1
+model.embed_tokens.weight                            (64, 32)           0.0%    0.778    1.1
+model.layers.0.mlp.down_proj.weight                  (32, 48)           0.0%    0.695    1.3
+model.layers.0.mlp.gate_proj.weight                  (48, 32)           0.0%    0.682    1.2
+model.layers.0.mlp.up_proj.weight                    (48, 32)           0.0%    0.675    1.2
+model.layers.1.mlp.down_proj.weight                  (32, 48)           0.0%    0.734    1.5
+... 24 more tensors (largest 6 shown)
+
+provenance (weightkit_manifest.json):
+  weightkit 0.1.0 · 2026-11-09T17:59:38+00:00
+  data used: none
+    - prune            data=none           touched 9 tensors
+    - rotate           data=none           touched 30 tensors</pre>
+    </div>
+    <div>
+      <h3 style="font-size:22px;margin-bottom:10px">Know what was done to your weights.</h3>
+      <p style="color:var(--mut);margin:0 0 10px">That output is from a two-step pipeline: <code>prune</code> 50% of the MLPs, then <code>rotate</code>. Look at the first line: <b>0.0% zeros</b>. The rotation mixed channels and re-densified the pruned weights, so order matters (rotate first, then prune). <code>inspect</code> makes that visible in one command.</p>
+      <p style="color:var(--mut);margin:0">Every saved checkpoint also gets a <code>weightkit_manifest.json</code>: each op with its parameters, how many tensors it touched, and <b>which outside information it used</b>: <code>none</code>, <code>calibration</code> (with token count), <code>supplied</code> vectors, or <code>other_models</code>. Manifests chain across generations, so "this model was edited with 0 data" becomes checkable.</p>
+    </div>
   </div>
 </div></section>
 
@@ -309,7 +372,7 @@ weightkit calibrate ./model calib.pt --text corpus.txt --xtx</pre>
 
 <section id="verified"><div class="wrap">
   <div class="reveal"><div class="kicker">Trust, but verify</div><h2>Tests assert behaviour, not just shapes.</h2>
-  <p class="lead">74 tests, run against a pure-torch tiny Llama <i>and</i> a real <code>transformers.LlamaForCausalLM</code>.</p></div>
+  <p class="lead">104 tests (84 without the optional handnet fixtures), run against a pure-torch tiny Llama <i>and</i> a real <code>transformers.LlamaForCausalLM</code>.</p></div>
   <div class="checks reveal">
     <div class="check"><i>✓</i><p><b>Exact ops keep logits unchanged:</b> fold_norm, rotate (incl. non-power-of-two &amp; biased models), permute, rescale, smooth_scale, align, kv_pool on duplicated heads.</p></div>
     <div class="check"><i>✓</i><p><b>Abliteration:</b> the target direction's component is ≈ 0 at the embedding and after every layer's output.</p></div>
@@ -331,6 +394,7 @@ weightkit calibrate ./model calib.pt --text corpus.txt --xtx</pre>
   <div><a href="https://github.com/BirgerMoell/weightkit">GitHub</a> · <a href="https://github.com/arcee-ai/mergekit">mergekit (inspiration)</a></div>
 </div></footer>
 
+<script src="circuit_lab.js"></script>
 <script>
 "use strict";
 /* ---------- utilities ---------- */
@@ -535,6 +599,39 @@ const CAT=[
     $$("#fam button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===cf))}
   fams.forEach(f=>{const b=document.createElement("button");b.dataset.f=f;b.textContent=f+(f==="all"?` (${CAT.length})`:` (${CAT.filter(c=>c[0]===f).length})`);b.onclick=()=>{cf=f;render()};fam.appendChild(b)});
   render();
+})();
+
+/* ---------- circuit lab (data: circuit_lab.js, produced by scripts/circuit_lab.py) ---------- */
+(function(){
+  const D=window.CIRCUIT_LAB;if(!D){$("#circuits").style.display="none";return}
+  const tasks=Object.keys(D.tasks),NAMES={addition:"Addition with carry",dyck:"Dyck-1 brackets",induction:"Induction / copy"};
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let cur=tasks[0];
+  function chart(cv,spec){
+    const d=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*d;cv.height=h*d;const c=cv.getContext("2d");c.setTransform(d,0,0,d,0,0);c.clearRect(0,0,w,h);
+    const L=34,R=8,T=8,B=24,pw=w-L-R,ph=h-T-B,X=spec.x,sx=v=>L+v*pw,sy=v=>T+(1-v)*ph;
+    c.font="11px "+css("--mono");c.lineWidth=1;
+    for(const v of [0,.25,.5,.75,1]){c.strokeStyle=css("--line");c.beginPath();c.moveTo(L,sy(v));c.lineTo(w-R,sy(v));c.stroke();c.fillStyle=css("--dim");c.textAlign="right";c.fillText(Math.round(v*100)+"%",L-5,sy(v)+4)}
+    c.textAlign="center";c.fillStyle=css("--dim");spec.ticks.forEach(([v,t])=>c.fillText(t,sx(v),h-7));
+    if(spec.mark){c.setLineDash([4,4]);c.strokeStyle=css("--amber");c.beginPath();c.moveTo(sx(spec.mark[0]),T);c.lineTo(sx(spec.mark[0]),T+ph);c.stroke();c.setLineDash([]);c.fillStyle=css("--amber");c.textAlign="left";c.fillText(spec.mark[1],sx(spec.mark[0])+5,T+12)}
+    if(spec.band){c.fillStyle=css("--vio");c.globalAlpha=.18;c.beginPath();X.forEach((x,i)=>c[i?"lineTo":"moveTo"](sx(x),sy(spec.band.max[i])));for(let i=X.length-1;i>=0;i--)c.lineTo(sx(X[i]),sy(spec.band.min[i]));c.fill();c.globalAlpha=1}
+    spec.lines.forEach(l=>{c.strokeStyle=css(l.color);c.lineWidth=2.4;c.beginPath();X.forEach((x,i)=>c[i?"lineTo":"moveTo"](sx(x),sy(l.y[i])));c.stroke();c.fillStyle=css(l.color);X.forEach((x,i)=>{c.beginPath();c.arc(sx(x),sy(l.y[i]),3,0,6.3);c.fill()})});
+  }
+  function draw(){
+    const t=D.tasks[cur],P=t.prune;
+    $("#clmeta").innerHTML=[["circuit",NAMES[cur]],["weights (2-D)",t.support_pct.toFixed(1)+"% non-zero"],["params / non-zero",t.params+" / "+t.nonzero],["baseline accuracy",(t.baseline*100).toFixed(0)+"%"]].map(([k,v])=>`<div class="m"><small>${k}</small><b style="font-size:16px">${v}</b></div>`).join("");
+    const kx=P.kept_of_design.map(k=>k/1.5);
+    chart($("#ch1"),{x:kx,lines:[{y:P.global,color:"--cyan"},{y:P.layer,color:"--pink"}],ticks:[[0,"0%"],[.5/1.5,"50%"],[1/1.5,"100%"],[1,"150%"]],mark:[1/1.5,"design"]});
+    const bx=t.rtn.bits.map(b=>(b-2)/6);
+    chart($("#ch2"),{x:bx,lines:[{y:t.rtn.acc,color:"--cyan"}],ticks:t.rtn.bits.filter(b=>b%2==0).map(b=>[(b-2)/6,b+"b"])});
+    const n=t.noise,lx=n.std.map((s,i)=>i/(n.std.length-1));
+    chart($("#ch3"),{x:lx,lines:[{y:n.mean,color:"--cyan"}],band:{min:n.min,max:n.max},ticks:n.std.map((s,i)=>[i/(n.std.length-1),s===0?"0":String(s)]).filter((_,i)=>i%2===0)});
+    const g=P.global[1],l=P.layer[1];
+    $("#clfind").innerHTML=`<b>${NAMES[cur]}:</b> pruning to exactly the designed support is <b>${(g*100).toFixed(0)}% accurate</b> with global magnitude pruning (it recovers the hand-written weights), but only <b>${(l*100).toFixed(0)}%</b> layer-wise at the same sparsity. Measured with ${D.n_eval} test instances per point.`;
+  }
+  tasks.forEach(k=>{const b=document.createElement("button");b.className="op";b.textContent=NAMES[k];b.setAttribute("aria-pressed",k===cur);b.onclick=()=>{cur=k;$$("#cltabs .op").forEach(x=>x.setAttribute("aria-pressed",x===b));draw()};$("#cltabs").appendChild(b)});
+  draw();addEventListener("resize",draw);
+  new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
 })();
 </script>
 </body>

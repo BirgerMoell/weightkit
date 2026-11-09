@@ -24,7 +24,7 @@ from safetensors import safe_open
 from safetensors.torch import save_file
 
 _WEIGHT_EXT = (".safetensors", ".bin", ".pt", ".pth", ".gguf", ".msgpack", ".h5")
-_NO_COPY = {"config.json", "model.safetensors.index.json", "pytorch_model.bin.index.json"}
+_NO_COPY = {"weightkit_manifest.json", "config.json", "model.safetensors.index.json", "pytorch_model.bin.index.json"}
 
 
 class _FileSource:
@@ -76,6 +76,12 @@ class TensorStore:
         self._spill_dir: Optional[str] = None
         self._spill_n = 0
         self._parent = None  # keeps a snapshot's source (and its spill files) alive
+        # provenance (see manifest.py)
+        self.source: Optional[str] = None
+        self.parent_manifest: Optional[dict] = None
+        self.ledger: List[dict] = []
+        self.written: set = set()  # tensor names set/deleted since last reset (per-op accounting)
+        self.manifest_extra: dict = {}
 
     # ------------------------------------------------------------ construction
     @classmethod
@@ -108,6 +114,14 @@ class TensorStore:
             with open(cfg) as f:
                 config = json.load(f)
         store = cls(config=config, extras_dir=root, **kw)
+        store.source = os.path.abspath(path)
+        mf = os.path.join(root, "weightkit_manifest.json")
+        if os.path.exists(mf):
+            try:
+                with open(mf) as f:
+                    store.parent_manifest = json.load(f)
+            except (OSError, ValueError):
+                pass
         store._layers.append(_FileSource(mapping))
         store._names = {k: None for k in mapping}
         return store
@@ -165,11 +179,13 @@ class TensorStore:
         self._overlay[name] = tensor
         self._overlay_bytes += tensor.numel() * tensor.element_size()
         self._names[name] = None
+        self.written.add(name)
         if self._overlay_bytes > self.spill_bytes:
             self._spill()
 
     def __delitem__(self, name: str) -> None:
         del self._names[name]
+        self.written.add(name)
         old = self._overlay.pop(name, None)
         if old is not None:
             self._overlay_bytes -= old.numel() * old.element_size()
@@ -228,6 +244,11 @@ class TensorStore:
         if cfg:
             with open(os.path.join(out_dir, "config.json"), "w") as f:
                 json.dump(cfg, f, indent=2)
+        if self.ledger or self.parent_manifest:
+            from .manifest import build_manifest
+
+            with open(os.path.join(out_dir, "weightkit_manifest.json"), "w") as f:
+                json.dump(build_manifest(self), f, indent=2)
         if copy_extras and self.extras_dir and os.path.isdir(self.extras_dir):
             if os.path.abspath(self.extras_dir) != os.path.abspath(out_dir):
                 for fn in os.listdir(self.extras_dir):

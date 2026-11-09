@@ -98,8 +98,8 @@ class Prune(Op):
     method: magnitude (|W|)            - no data needed
             wanda     (|W| * ||x_j||)  - needs calibration activation norms
             sparsegpt (OBS update)     - needs calibration ``xtx`` (collect with xtx=True)
-    sparsity: fraction removed.  granularity (magnitude/wanda): layer | row | column
-    (wanda default: row).  nm: [n, m] keeps n of every m consecutive input weights
+    sparsity: fraction removed.  granularity (magnitude/wanda): layer | row | column | global
+    (wanda default: row; global = one threshold over all selected tensors).  nm: [n, m] keeps n of every m consecutive input weights
     (e.g. [2, 4] is hardware 2:4 sparsity) and overrides ``sparsity``.
     """
 
@@ -116,15 +116,20 @@ class Prune(Op):
             raise ValueError(f"unknown prune method {method!r}")
         self.method, self.sparsity, self.nm, self.blocksize = method, sparsity, nm, blocksize
         self.granularity = granularity or ("row" if method == "wanda" else "layer")
+        if self.granularity not in ("layer", "row", "column", "global"):
+            raise ValueError("granularity must be layer, row, column or global")
+        self.data_tags = () if method == "magnitude" else ("calibration",)
         sel.setdefault("exclude", None)
         self.sel = Selection.from_kwargs(sel)
 
     def run(self, ctx: Context) -> None:
+        names = [n for n in ctx.select(self.sel) if ctx.state[n].dim() == 2]
+        if self.granularity == "global":
+            self._run_global(ctx, names)
+            return
         total = zeros = 0
-        for name in ctx.select(self.sel):
+        for name in names:
             W = ctx.get(name)
-            if W.dim() != 2:
-                continue
             if self.method == "sparsegpt":
                 new = sparsegpt(W, ctx.need_calib().xtx(name).to(ctx.device), self.sparsity, self.nm, self.blocksize)
             else:
@@ -137,3 +142,24 @@ class Prune(Op):
             zeros += int((new == 0).sum())
         if total:
             ctx.log(f"prune/{self.method}: {zeros / total:.1%} of {total} weights are zero")
+
+    def _run_global(self, ctx: Context, names) -> None:
+        """One threshold across all selected tensors (needs all their scores in memory)."""
+        if self.method == "sparsegpt" or self.nm:
+            raise ValueError("granularity 'global' supports magnitude/wanda without nm")
+        Ws = {n: ctx.get(n) for n in names}
+        scores = []
+        for n, W in Ws.items():
+            sc = W.abs()
+            if self.method == "wanda":
+                sc = sc * ctx.need_calib().norm(n).to(ctx.device)[None, :]
+            scores.append(sc.flatten())
+        flat = torch.cat(scores)
+        mask = torch.ones_like(flat, dtype=torch.bool)
+        mask[flat.argsort()[: int(flat.numel() * self.sparsity)]] = False
+        off = 0
+        for n, W in Ws.items():
+            m = mask[off : off + W.numel()].reshape(W.shape)
+            off += W.numel()
+            ctx.write(n, W * m)
+        ctx.log(f"prune/{self.method}/global: removed {(~mask).float().mean():.1%} of {flat.numel()} weights")

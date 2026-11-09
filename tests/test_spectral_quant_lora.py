@@ -108,3 +108,11 @@ def test_lora_merge_no_match_errors(tmp_path):
     json.dump({"r": 1}, open(d / "adapter_config.json", "w"))
     with pytest.raises(ValueError, match="no LoRA"):
         apply_op(base, "lora_merge", adapter=str(d))
+
+
+def test_spectral_all_zero_matrix_stays_finite_in_every_mode():
+    """Regression: power mode computed 0 * (0/0) = NaN for all-zero matrices (found via handnet circuits)."""
+    for kw in (dict(mode="power", power=0.5), dict(mode="energy"), dict(mode="clip"), dict(mode="truncate", rank=2), dict(mode="scale_top", k=1, factor=2.0)):
+        s = TensorStore.from_dict({"w": torch.zeros(6, 6)})
+        apply_op(s, "spectral", include=["w"], **kw)
+        assert torch.equal(s["w"], torch.zeros(6, 6)), kw

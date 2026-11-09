@@ -126,3 +126,13 @@ def test_perturb_and_cast():
     assert 0.02 < ((s["lm_head.weight"] - w).std() / w.std()).item() < 0.3
     apply_op(s, "cast", dtype="bfloat16")
     assert s["lm_head.weight"].dtype == torch.bfloat16 and s.config["torch_dtype"] == "bfloat16"
+
+
+def test_perturb_single_element_tensor_is_finite():
+    """Regression: unbiased std of a 1-element tensor is NaN and poisoned the whole model."""
+    from weightkit import TensorStore
+
+    s = TensorStore.from_dict({"b": torch.tensor([3.0]), "w": torch.randn(4, 4)})
+    apply_op(s, "perturb", std=0.1, include=["*"])
+    assert torch.isfinite(s["b"]).all() and torch.isfinite(s["w"]).all()
+    assert s["b"].item() == 3.0  # std of a single element is 0 -> no noise

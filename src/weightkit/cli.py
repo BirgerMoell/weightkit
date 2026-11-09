@@ -63,6 +63,19 @@ def cmd_diff(args) -> int:
     return 0
 
 
+def cmd_inspect(args) -> int:
+    from .inspect import format_report, inspect_store
+    from .store import TensorStore
+
+    info = inspect_store(TensorStore.from_path(args.model), rank=args.rank)
+    if args.json:
+        info = {k: v for k, v in info.items() if k != "manifest"}
+        print(json.dumps(info, indent=2, default=str))
+    else:
+        print(format_report(info, args.top, args.rank))
+    return 0
+
+
 def cmd_extract_lora(args) -> int:
     from .ops.delta import extract_lora
     from .store import TensorStore
@@ -137,6 +150,13 @@ def main(argv=None) -> int:
     s.add_argument("b")
     s.add_argument("--top", type=int, default=15)
     s.set_defaults(fn=cmd_diff)
+
+    s = sub.add_parser("inspect", help="size, sparsity, outliers, spectra and provenance of a checkpoint")
+    s.add_argument("model")
+    s.add_argument("--rank", action="store_true", help="also compute effective rank (SVD; slower)")
+    s.add_argument("--top", type=int, default=12)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_inspect)
 
     s = sub.add_parser("extract-lora", help="SVD-extract a LoRA adapter from finetuned - base")
     s.add_argument("base")

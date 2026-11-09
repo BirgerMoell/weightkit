@@ -31,6 +31,10 @@ class Calibration:
         if xtx:
             self.xtx_sum[name] = self.xtx_sum.get(name, 0) + x.T @ x
 
+    def tokens(self) -> int:
+        """Number of calibration tokens seen (max over layers; every layer sees each token)."""
+        return int(max(self.n.values())) if self.n else 0
+
     # ---- access
     def has(self, name: str, kind: str = "norm") -> bool:
         return name in (self.sumsq if kind == "norm" else self.xtx_sum)

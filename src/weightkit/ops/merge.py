@@ -96,6 +96,8 @@ class Merge(Op):
     the slerp interpolation (0 = current state, 1 = sources[0]).
     """
 
+    data_tags = ('other_models',)
+
     def __init__(
         self,
         method: str,

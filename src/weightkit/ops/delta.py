@@ -25,6 +25,8 @@ class TaskVector(Op):
     names (``self`` = current state).
     """
 
+    data_tags = ('other_models',)
+
     def __init__(self, finetuned: str, base: str = "self", scale: float = 1.0, **sel):
         self.ft, self.base, self.scale = finetuned, base, scale
         if not any(k in sel for k in ("roles", "include", "layers")):
@@ -64,6 +66,8 @@ def read_adapter(path: str):
 @register("lora_merge", "delta")
 class LoraMerge(Op):
     """Merge a PEFT LoRA adapter directory into the weights: W += scale * (alpha/r) * B @ A."""
+
+    data_tags = ('other_models',)
 
     def __init__(self, adapter: str, scale: float = 1.0):
         self.adapter, self.scale = adapter, scale

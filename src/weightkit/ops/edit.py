@@ -55,6 +55,8 @@ class EditFacts(Op):
     recommended - it is what keeps unrelated knowledge intact); ``lam`` scales it.
     """
 
+    data_tags = ('supplied',)
+
     def __init__(self, edits: Union[str, dict], layer: int, role: str = "down", mode: str = "memit", lam: float = 1.0):
         if mode not in ("memit", "rome"):
             raise ValueError("mode must be memit or rome")
@@ -70,6 +72,7 @@ class EditFacts(Op):
         C = None
         if ctx.calib is not None and ctx.calib.has(name, "xtx"):
             C = ctx.calib.xtx(name).to(ctx.device, ctx.dtype)
+            self.data_used = ("calibration",)
         else:
             ctx.log("edit_facts: no calibration covariance, using identity (edits may bleed)")
         if self.mode == "rome":
@@ -115,6 +118,7 @@ class Abliterate(Op):
             raise ValueError("give `direction`, or `pos`, `neg` and `layer`")
         self.direction, self.pos, self.neg, self.layer = direction, pos, neg, layer
         self.strength, self.write_to, self.layers = strength, tuple(write_to), layers
+        self.data_tags = (("supplied",) if direction is not None else ("calibration",))
 
     def _direction(self, ctx: Context) -> torch.Tensor:
         if self.direction is not None:
@@ -157,6 +161,8 @@ class SteerBias(Op):
     to the residual stream after decoder layer ``layer`` for every token, via
     the layer's down_proj bias (creates zero biases on all MLPs and sets
     ``mlp_bias: true``, as HF Llama-style configs require uniform biases)."""
+
+    data_tags = ('supplied',)
 
     def __init__(self, vector: Union[str, dict], layer: int, scale: float = 1.0):
         self.vector, self.layer, self.scale = vector, layer, scale

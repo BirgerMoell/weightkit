@@ -65,7 +65,7 @@ pip install -e ".[hf,fast]" # + transformers (calibrate CLI) + scipy (exact Hung
 | **merge** | `merge` — `linear`, `slerp`, `model_stock`, `task_arithmetic`, `ties`, `dare_linear`, `dare_ties`, `breadcrumbs`, `breadcrumbs_ties` |
 | **delta** | `task_vector` (negate / extrapolate / interpolate), `lora_merge`; `weightkit extract-lora` |
 | **spectral** | `spectral` — `truncate`, `energy`, `power`, `clip`, `scale_top` |
-| **prune** | `prune` — `magnitude`, `wanda`, `sparsegpt`; granularity layer/row/column; `nm: [n, m]` |
+| **prune** | `prune` — `magnitude`, `wanda`, `sparsegpt`; granularity layer/row/column/**global**; `nm: [n, m]` |
 | **edit** | `edit_facts` (MEMIT / ROME), `abliterate`, `steer_bias` |
 | **transform** (exact) | `fold_norm`, `rotate`, `permute`, `rescale`, `smooth_scale`, `align` |
 | **surgery** | `layer_stack`, `drop_layers`, `prune_mlp`, `prune_heads`, `kv_pool`, `untie_embeddings`, `tie_embeddings`, `resize_vocab`, `perturb`, `cast` |
@@ -79,6 +79,7 @@ Most ops accept a *selection*: `roles` (`q k v o gate up down attn mlp all_linea
 weightkit run pipeline.yaml                       # full pipeline
 weightkit apply ./model ./out prune --params '{"method":"magnitude","sparsity":0.5}'
 weightkit diff ./model ./out                      # what actually changed?
+weightkit inspect ./out --rank                    # size, zeros, outliers, provenance
 weightkit extract-lora ./base ./finetune ./adapter --rank 32
 weightkit calibrate ./model calib.pt --text corpus.txt --xtx \
     --hidden harmful=harmful.txt --hidden harmless=harmless.txt --hidden-layers 14
@@ -120,9 +121,35 @@ class MyOp(Op):
             ctx.write(name, ctx.get(name) * self.factor)
 ```
 
+## Provenance, inspection and data accounting
+
+```bash
+weightkit inspect ./model --rank      # params, zeros, outlier channels, effective rank, provenance
+```
+
+Every checkpoint saved after ops gets a `weightkit_manifest.json`: each op with its parameters, the number of tensors it touched, and **what outside information it used** — `none`, `calibration` (with the token count), `supplied` (vectors/edits you provided) or `other_models` (merge sources, adapters). Manifests chain through generations, so "edited with 0 data" is checkable rather than a claim. (Idea borrowed from [handnet](https://github.com/BirgerMoell/handnet)'s "labels seen" accounting.)
+
+`inspect` is also how you catch ordering mistakes: `prune` followed by `rotate` leaves **0% zeros**, because the rotation re-densifies the weights. Rotate first, then prune.
+
+## Circuit lab: ground-truth testing with hand-written networks
+
+[handnet](https://github.com/BirgerMoell/handnet) contains transformers whose weights were *written by hand* (addition with carry, Dyck-1 brackets, induction), exactly 100% accurate with only 1–14% non-zero weights. That gives weight-editing ops something rare: a known right answer. `weightkit.circuits` bridges them into a `TensorStore`; `scripts/circuit_lab.py` measures the curves shown on the [site](https://birgermoell.github.io/weightkit/#circuits).
+
+What this established (all asserted in `tests/test_circuits.py`):
+
+* **Global magnitude pruning at the designed sparsity recovers the hand-written weights exactly** (identical support *and* values) on all three circuits; one percent further collapses them. Layer-wise and row-wise pruning at the same sparsity do not (8–48% accuracy), since designed weights are unevenly distributed. This is why `prune` has `granularity: global`.
+* Induction survives even 2-bit per-row RTN (its rows hold ≤ 2 distinct values); Dyck survives 8-bit but not 6; addition does not survive 8-bit.
+* Tiny noise (0.1% of each tensor's std) is harmless; 20% is destructive.
+* It found two real bugs in weightkit that the logit-based tests had missed (`perturb` NaN on one-element tensors; `spectral` power-mode NaN on all-zero matrices). Both fixed with regression tests.
+
+```bash
+pip install git+https://github.com/BirgerMoell/handnet   # optional, numpy-only
+pytest tests/test_circuits.py
+```
+
 ## Testing & what is verified
 
-`pytest` runs 74 tests. Beyond shape checks, they assert behaviour:
+`pytest` runs 104 tests (84 without the optional handnet fixtures). Beyond shape checks, they assert behaviour:
 
 * every function-preserving op (`fold_norm`, `rotate` incl. non-power-of-two and biased models, `permute`, `rescale`, `smooth_scale`, `align`, `kv_pool` on duplicated heads, tie/untie, no-op `prune_*`) leaves **logits unchanged**, on a pure-torch tiny Llama *and* a real `transformers.LlamaForCausalLM`;
 * `abliterate` makes the residual stream's component along `r` ≈ 0 at the embedding and after every layer;

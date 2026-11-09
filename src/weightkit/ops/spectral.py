@@ -38,6 +38,8 @@ class Spectral(Op):
 
     def _reshape(self, S: torch.Tensor) -> torch.Tensor:
         n = S.numel()
+        if not S.max() > 0:  # all-zero matrix (e.g. an unused head): nothing to reshape, avoid 0/0
+            return S
         if self.mode == "truncate":
             r = self.rank or max(1, int(n * self.rank_ratio))
             out = S.clone()

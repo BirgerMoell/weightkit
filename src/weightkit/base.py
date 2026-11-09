@@ -67,6 +67,11 @@ class Op:
 
     name: str = ""
     category: str = ""
+    # What outside information this op consumed (empty = data-free):
+    #   "calibration"    activations / statistics from a dataset
+    #   "supplied"       vectors/edits the user provided (may derive from data)
+    #   "other_models"   weights of other (trained) models or adapters
+    data_tags: tuple = ()
 
     def run(self, ctx: "Context") -> None:  # pragma: no cover
         raise NotImplementedError
@@ -131,6 +136,22 @@ class Context:
         g.manual_seed(self.seed * 1_000_003 + self._salt)
         return g
 
+    def run_op(self, op: "Op", params: Optional[dict] = None) -> None:
+        """Run ``op`` and record it in the store's provenance ledger."""
+        self.state.written = set()
+        op.run(self)
+        tags = sorted(set(op.data_tags) | set(getattr(op, "data_used", ())))
+        entry = {
+            "op": op.name,
+            "params": params or {},
+            "data": tags or ["none"],
+            "tensors_touched": len(self.state.written),
+        }
+        if "calibration" in tags and self.calib is not None:
+            entry["calibration_tokens"] = self.calib.tokens()
+        self.state.ledger.append(entry)
+        self.state.written = set()
+
     def need_calib(self) -> Calibration:
         if self.calib is None:
             raise ValueError(
@@ -166,5 +187,5 @@ def apply_op(
         seed=seed,
         log=log,
     )
-    get_op(op)(**params).run(ctx)
+    ctx.run_op(get_op(op)(**params), params)
     return store

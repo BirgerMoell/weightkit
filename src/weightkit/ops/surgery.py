@@ -220,7 +220,7 @@ class Perturb(Op):
         for n in ctx.select(self.sel):
             W = ctx.get(n)
             noise = torch.randn(W.shape, generator=ctx.generator()).to(W)
-            ctx.write(n, W + self.std * W.std() * noise)
+            ctx.write(n, W + self.std * W.std(unbiased=False) * noise)  # population std: defined for 1-element tensors
 
 
 @register("cast", "surgery")

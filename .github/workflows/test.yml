@@ -12,4 +12,5 @@ jobs:
         with: { python-version: "${{ matrix.python }}" }
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[test]"
+      - run: pip install "git+https://github.com/BirgerMoell/handnet"
       - run: pytest -q

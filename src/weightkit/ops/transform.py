@@ -239,6 +239,8 @@ class SmoothScale(Op):
     the following linears by s_j, with s_j = rms(x_j)^alpha / max|W_:j|^(1-alpha).
     Shifts quantization difficulty from activations into weights.  Needs calibration norms."""
 
+    data_tags = ('calibration',)
+
     def __init__(self, alpha: float = 0.5, layers=None):
         self.alpha, self.layers = alpha, layers
 
@@ -294,6 +296,8 @@ class Align(Op):
     weight matching (Git Re-Basin), *in place on that model*, so that a
     subsequent ``merge`` interpolates matching units.  Exact for ``model``.
     Useful when merging models that do not share a common fine-tuning ancestor."""
+
+    data_tags = ('other_models',)
 
     def __init__(self, model: str, reference: str = "self", layers=None):
         self.model, self.reference, self.layers = model, reference, layers

@@ -48,6 +48,10 @@ def run_pipeline(config: Union[str, dict], log: Callable[[str], None] = print) -
         seed=int(config.get("seed", 0)),
         log=log,
     )
+    state.manifest_extra = {
+        "models": {k: os.path.abspath(v) if os.path.exists(str(v)) else v for k, v in (config.get("models") or {}).items()},
+        "calibration_file": config.get("calibration"),
+    }
     steps = config.get("steps") or []
     for n, step in enumerate(steps, 1):
         step = dict(step)
@@ -56,7 +60,7 @@ def run_pipeline(config: Union[str, dict], log: Callable[[str], None] = print) -
             raise ValueError(f"step {n} has no `op`")
         log(f"[{n}/{len(steps)}] {name}")
         try:
-            get_op(name)(**step).run(ctx)
+            ctx.run_op(get_op(name)(**step), step)
         except TypeError as e:
             raise ValueError(f"step {n} ({name}): bad parameters: {e}") from e
     if config.get("output"):
